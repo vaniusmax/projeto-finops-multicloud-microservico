@@ -1,0 +1,31 @@
+[project]
+name = "finops-micro-backend"
+version = "0.1.0"
+description = "FinOps microservices API"
+readme = "README.md"
+requires-python = ">=3.13"
+dependencies = [
+  "fastapi>=0.116.0",
+  "uvicorn[standard]>=0.35.0",
+  "sqlalchemy>=2.0.42",
+  "psycopg2-binary>=2.9.10",
+  "alembic>=1.16.4",
+  "pydantic-settings>=2.10.1",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest>=8.4.1",
+  "httpx>=0.28.1",
+]
+
+[build-system]
+requires = ["hatchling>=1.27.0"]
+build-backend = "hatchling.build"
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+addopts = "-q"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/finops_api"]
