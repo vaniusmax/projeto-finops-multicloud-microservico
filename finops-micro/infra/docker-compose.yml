@@ -1,0 +1,53 @@
+services:
+  finops-db:
+    image: postgres:16
+    container_name: finops-db
+    env_file:
+      - .env
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - finops_db_data:/var/lib/postgresql/data
+      - ./db/init:/docker-entrypoint-initdb.d
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  finops-api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile
+    container_name: finops-api
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      CORS_ORIGINS: ${CORS_ORIGINS}
+    depends_on:
+      finops-db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  finops-web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+    container_name: finops-web
+    env_file:
+      - .env
+    environment:
+      NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
+    depends_on:
+      - finops-api
+    ports:
+      - "3000:3000"
+
+volumes:
+  finops_db_data:

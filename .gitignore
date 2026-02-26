@@ -1,0 +1,50 @@
+# =========================
+# Global ignores (workspace)
+# =========================
+
+# Legacy consultation project (ignore entirely)
+projeto-finops-multicloud/
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/.pytest_cache/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.coverage
+**/.coverage.*
+**/htmlcov/
+
+# Virtual environments
+**/.venv/
+**/venv/
+
+# Build / packaging
+**/build/
+**/dist/
+**/*.egg-info/
+
+# Node / frontend
+**/node_modules/
+**/.next/
+**/out/
+**/.npm/
+**/.pnpm-store/
+
+# Env files
+**/.env
+**/.env.*
+!.env.example
+
+# Logs / temp
+**/*.log
+**/.DS_Store
+**/Thumbs.db
+**/.idea/
+**/.vscode/
+
+# Docker / local runtime leftovers
+**/.docker/
+**/tmp/
+**/.cache/

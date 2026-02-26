@@ -1,0 +1,2 @@
+-- Coloque aqui o schema canônico v0 (ou copie o arquivo 001_finops_canonical_v0.sql do pacote anterior).
+-- Este arquivo é um placeholder para o init do Postgres.

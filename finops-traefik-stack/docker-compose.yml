@@ -1,0 +1,131 @@
+services:
+  traefik:
+    image: traefik:v3.6
+    container_name: traefik
+    restart: unless-stopped
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --providers.file.directory=/etc/traefik/dynamic
+      - --providers.file.watch=true
+
+      - --entrypoints.web.address=:80
+      - --entrypoints.websecure.address=:443
+
+      - --api.dashboard=true
+
+      - --log.level=INFO
+      - --accesslog=true
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./traefik/dynamic:/etc/traefik/dynamic:ro
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.traefik.rule=Host(`traefik.localhost`)
+      - traefik.http.routers.traefik.entrypoints=websecure
+      - traefik.http.routers.traefik.tls=true
+      - traefik.http.routers.traefik.service=api@internal
+
+  finops-db:
+    image: postgres:16
+    container_name: finops-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: finops
+      POSTGRES_USER: finops
+      POSTGRES_PASSWORD: finops123
+      TZ: America/Recife
+    volumes:
+      - finops_pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U finops -d finops"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  finops-db-init:
+    image: postgres:16
+    container_name: finops-db-init
+    restart: "no"
+    depends_on:
+      finops-db:
+        condition: service_healthy
+    environment:
+      PGPASSWORD: finops123
+      TZ: America/Recife
+    volumes:
+      - ./scripts:/sql:ro
+    command:
+      [
+        "bash",
+        "-lc",
+        "psql -h finops-db -U finops -d finops -v ON_ERROR_STOP=1 -f /sql/001_finops_canonical_v0.sql",
+      ]
+    networks:
+      - internal
+    profiles:
+      - init
+
+  pgadmin:
+    image: dpage/pgadmin4:9.12
+    container_name: finops-pgadmin
+    restart: unless-stopped
+    user: "5050:5050"
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@localhost.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+      PGADMIN_CONFIG_SERVER_MODE: "True"
+      PGADMIN_LISTEN_PORT: 80
+      TZ: America/Recife
+    depends_on:
+      finops-db:
+        condition: service_healthy
+    volumes:
+      - finops_pgadmin:/var/lib/pgadmin
+    networks:
+      - proxy
+      - internal
+    labels:
+      - traefik.enable=true
+      # ✅ FORÇA o Traefik a usar a rede proxy (evita timeout)
+      - traefik.docker.network=proxy
+      - traefik.http.routers.pgadmin.rule=Host(`pgadmin.localhost`)
+      - traefik.http.routers.pgadmin.entrypoints=websecure
+      - traefik.http.routers.pgadmin.tls=true
+      - traefik.http.services.pgadmin.loadbalancer.server.port=80
+
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - portainer_data:/data
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.http.routers.portainer.rule=Host(`portainer.localhost`)
+      - traefik.http.routers.portainer.entrypoints=websecure
+      - traefik.http.routers.portainer.tls=true
+      - traefik.http.services.portainer.loadbalancer.server.port=9000
+
+volumes:
+  finops_pgdata:
+  finops_pgadmin:
+  portainer_data:
+
+networks:
+  proxy:
+    name: proxy
+  internal:
+    name: internal
