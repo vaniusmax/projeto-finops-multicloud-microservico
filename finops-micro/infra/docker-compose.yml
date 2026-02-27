@@ -29,6 +29,7 @@ services:
     environment:
       DATABASE_URL: ${DATABASE_URL}
       CORS_ORIGINS: ${CORS_ORIGINS}
+      CORS_ORIGIN_REGEX: ${CORS_ORIGIN_REGEX}
     depends_on:
       finops-db:
         condition: service_healthy

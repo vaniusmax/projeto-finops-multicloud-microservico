@@ -1,1 +1,1 @@
-__all__ = ["common", "filters", "summary", "timeseries"]
+__all__ = ["common", "filters", "summary", "timeseries", "finops"]

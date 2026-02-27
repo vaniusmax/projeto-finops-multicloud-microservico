@@ -23,7 +23,22 @@ class AutoIngestService:
 
         providers = ["aws", "azure", "oci"] if cloud == "all" else [cloud]
         for provider in providers:
-            has_data = self.repo.has_data_in_range(provider, start, end)
+            if provider == "aws":
+                has_service_data = self.repo.has_source_data_covering_range(
+                    cloud="aws",
+                    start=start,
+                    end=end,
+                    source_ref="aws_ce_service_cli",
+                )
+                has_account_data = self.repo.has_source_data_covering_range(
+                    cloud="aws",
+                    start=start,
+                    end=end,
+                    source_ref="aws_ce_account_cli",
+                )
+                has_data = has_service_data and has_account_data
+            else:
+                has_data = self.repo.has_data_covering_range(provider, start, end)
             if has_data:
                 continue
             try:
