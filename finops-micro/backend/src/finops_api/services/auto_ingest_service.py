@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from finops_api.core.config import settings
 from finops_api.repositories.fact_cost_repo import FactCostRepository
+from finops_api.services.currency_rate_sync_service import CurrencyRateSyncService
 from finops_api.services.ingest_service import run_ingest_job
 
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ class AutoIngestService:
 
     def ensure_range(self, cloud: str, start: date, end: date) -> None:
         if not settings.auto_ingest_on_request:
+            self._ensure_currency_rate(end)
             return
 
         providers = ["aws", "azure", "oci"] if cloud == "all" else [cloud]
@@ -53,3 +55,11 @@ class AutoIngestService:
                 # Garante sessao limpa para as proximas queries do request.
                 self.db.rollback()
                 logger.warning("Auto ingest falhou para %s: %s", provider, exc)
+        self._ensure_currency_rate(end)
+
+    def _ensure_currency_rate(self, as_of: date) -> None:
+        try:
+            CurrencyRateSyncService(self.db).ensure_brl_usd_rate(as_of)
+        except Exception as exc:  # noqa: BLE001
+            self.db.rollback()
+            logger.warning("Sincronizacao de cotacao falhou para %s: %s", as_of.isoformat(), exc)

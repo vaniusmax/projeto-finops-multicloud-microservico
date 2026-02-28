@@ -7,6 +7,7 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
+from finops_api.core.config import settings
 from finops_api.providers.common.types import CanonicalCostRow
 
 
@@ -15,11 +16,13 @@ class AwsCliSettings:
     cli_path: str = "aws"
     profile: str | None = None
     metric: str = "UnblendedCost"
+    account_names: dict[str, str] | None = None
 
 
 class AwsCliClient:
     def __init__(self, settings: AwsCliSettings) -> None:
         self.settings = settings
+        self.account_names = settings.account_names or self._load_account_names()
 
     def fetch_daily_costs(self, start: date, end: date) -> list[CanonicalCostRow]:
         service_rows = self._fetch_grouped_rows(start, end, group_by_keys=["SERVICE"])
@@ -133,6 +136,7 @@ class AwsCliClient:
                 if not keys:
                     continue
                 account = str(keys[account_idx]) if account_idx < len(keys) else "__ALL__"
+                account_name = self.account_names.get(account.strip(), account)
                 metrics = group.get("Metrics", {})
                 metric_data = metrics.get(self.settings.metric) or next(iter(metrics.values()), {})
                 amount = Decimal(str(metric_data.get("Amount") or "0"))
@@ -142,7 +146,7 @@ class AwsCliClient:
                         cloud="aws",
                         usage_date=usage_day,
                         scope_key=account,
-                        scope_name=account,
+                        scope_name=account_name,
                         service_key="__ALL__",
                         service_name="__ALL__",
                         region_key="global",
@@ -155,3 +159,13 @@ class AwsCliClient:
                     )
                 )
         return rows
+
+    @staticmethod
+    def _load_account_names() -> dict[str, str]:
+        try:
+            raw = json.loads(settings.aws_account_names_json or "{}")
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {str(key).strip(): str(value).strip() for key, value in raw.items() if str(key).strip()}

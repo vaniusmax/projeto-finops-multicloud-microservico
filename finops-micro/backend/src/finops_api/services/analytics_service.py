@@ -70,7 +70,7 @@ class AnalyticsService:
         peak = max(daily, key=lambda item: item["total"]) if daily else {"date": filters.start, "total": 0.0}
         peak_day = PeakDay(date=peak["date"], amount=peak["total"])
 
-        reference_date = date.today()
+        reference_date = filters.end
         month_start = reference_date.replace(day=1)
         month_filters = QueryFilters(
             cloud=filters.cloud,

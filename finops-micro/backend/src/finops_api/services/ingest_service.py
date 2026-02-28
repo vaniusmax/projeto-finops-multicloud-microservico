@@ -6,7 +6,7 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 
-from sqlalchemy import func, select, update
+from sqlalchemy import delete, func, select, update
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -82,6 +82,7 @@ class IngestService:
         region_cache: dict[tuple[str, str], str] = {}
 
         for row in rows:
+            self._cleanup_legacy_currency_mismatch(row)
             scope_id = self._get_or_create_scope(row, scope_cache)
             service_id = self._get_or_create_service(row, service_cache)
             region_id = self._get_or_create_region(row, region_cache)
@@ -136,6 +137,29 @@ class IngestService:
         self.db.commit()
         return written
 
+    def _cleanup_legacy_currency_mismatch(self, row: CanonicalCostRow) -> None:
+        # Corrige legado: alguns registros Azure/OCI foram persistidos como USD
+        # mesmo com valor já em BRL, inflando KPIs por conversão duplicada.
+        if row.cloud not in {"azure", "oci"}:
+            return
+        if str(row.currency_code or "").upper() != "BRL":
+            return
+
+        stmt = (
+            delete(FactCostDaily)
+            .where(FactCostDaily.usage_date == row.usage_date)
+            .where(FactCostDaily.cloud == row.cloud)
+            .where(FactCostDaily.scope_key == row.scope_key)
+            .where(FactCostDaily.service_key == row.service_key)
+            .where(func.coalesce(FactCostDaily.region_key, "") == (row.region_key or ""))
+            .where(func.coalesce(FactCostDaily.resource_id, "") == "")
+            .where(func.coalesce(FactCostDaily.charge_type, "") == "")
+            .where(func.coalesce(FactCostDaily.pricing_model, "") == "")
+            .where(FactCostDaily.source_ref == row.source_ref)
+            .where(FactCostDaily.currency_code == "USD")
+        )
+        self.db.execute(stmt)
+
     def _get_or_create_scope(self, row: CanonicalCostRow, cache: dict[tuple[str, str], str]) -> str:
         key = (row.cloud, row.scope_key)
         cached = cache.get(key)
@@ -146,6 +170,11 @@ class IngestService:
             select(DimScope.scope_id).where(DimScope.cloud == row.cloud, DimScope.scope_key == row.scope_key)
         ).scalar_one_or_none()
         if existing:
+            self.db.execute(
+                update(DimScope)
+                .where(DimScope.scope_id == existing)
+                .values(scope_name=row.scope_name, metadata_json={"origin": "cli_ingest"})
+            )
             cache[key] = str(existing)
             return str(existing)
 
@@ -154,7 +183,10 @@ class IngestService:
             scope_key=row.scope_key,
             scope_name=row.scope_name,
             metadata_json={"origin": "cli_ingest"},
-        ).on_conflict_do_nothing(index_elements=[DimScope.cloud, DimScope.scope_key])
+        ).on_conflict_do_update(
+            index_elements=[DimScope.cloud, DimScope.scope_key],
+            set_={"scope_name": row.scope_name, "metadata_json": {"origin": "cli_ingest"}},
+        )
         self.db.execute(stmt)
         scope_id = self.db.execute(
             select(DimScope.scope_id).where(DimScope.cloud == row.cloud, DimScope.scope_key == row.scope_key)

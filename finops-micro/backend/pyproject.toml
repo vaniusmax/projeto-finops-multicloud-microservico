@@ -11,12 +11,12 @@ dependencies = [
   "psycopg2-binary>=2.9.10",
   "alembic>=1.16.4",
   "pydantic-settings>=2.10.1",
+  "httpx>=0.28.1",
 ]
 
 [project.optional-dependencies]
 dev = [
   "pytest>=8.4.1",
-  "httpx>=0.28.1",
 ]
 
 [build-system]

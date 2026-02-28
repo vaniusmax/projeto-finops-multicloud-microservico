@@ -72,7 +72,12 @@ class OciCliClient:
             service = str(item.get("service") or "Outros")
             compartment = str(item.get("compartment-name") or "Sem compartment")
             sku_name = str(item.get("sku-name") or "Outros")
-            currency = str(item.get("currency") or "USD")
+            currency = str(
+                item.get("currency")
+                or item.get("currency-code")
+                or item.get("currencyCode")
+                or "BRL"
+            ).strip().upper() or "BRL"
             amount = Decimal(str(item.get("computed-amount") or "0"))
 
             rows.append(

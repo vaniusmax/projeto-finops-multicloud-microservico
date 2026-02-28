@@ -14,6 +14,7 @@ import { Sidebar } from "@/components/layout/Sidebar";
 import { LinkedAccountTable } from "@/components/tables/LinkedAccountTable";
 import { TopServicesTable } from "@/components/tables/TopServicesTable";
 import { Card, CardContent } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useDashboardFilters } from "@/hooks/use-dashboard-filters";
 import {
@@ -27,6 +28,8 @@ import { toSearchParams } from "@/lib/query/search-params";
 
 export default function DashboardPage() {
   const [drilldownOpen, setDrilldownOpen] = useState(false);
+  const [accountsChartType, setAccountsChartType] = useState<"bar" | "line" | "pie">("bar");
+  const [dailyChartType, setDailyChartType] = useState<"line" | "bar" | "pie">("line");
   const searchParams = useSearchParams();
   const tab = searchParams.get("tab") === "ai" ? "ai" : "dashboard";
 
@@ -104,10 +107,24 @@ export default function DashboardPage() {
             </section>
 
             <section className="mt-8 border-t border-slate-200 pt-6">
+              <div className="mb-3 flex justify-end">
+                <div className="w-[180px]">
+                  <Select value={accountsChartType} onValueChange={(value) => setAccountsChartType(value as "bar" | "line" | "pie")}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo do gráfico" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="bar">Barras</SelectItem>
+                      <SelectItem value="line">Linha</SelectItem>
+                      <SelectItem value="pie">Pizza</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="grid gap-4 lg:grid-cols-5">
                 <div className="lg:col-span-3">
                 {topAccounts.data && topAccounts.data.length > 0 ? (
-                  <BarChartCost data={topAccounts.data} currency={filters.currency} />
+                  <BarChartCost data={topAccounts.data} currency={filters.currency} chartType={accountsChartType} />
                 ) : (
                   <Card>
                     <CardContent className="p-6 text-sm text-slate-500">Sem dados para análise de barras no período.</CardContent>
@@ -127,10 +144,24 @@ export default function DashboardPage() {
             </section>
 
             <section className="mt-8 border-t border-slate-200 pt-6">
+              <div className="mb-3 flex justify-end">
+                <div className="w-[180px]">
+                  <Select value={dailyChartType} onValueChange={(value) => setDailyChartType(value as "line" | "bar" | "pie")}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Tipo do gráfico" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="line">Linha</SelectItem>
+                      <SelectItem value="bar">Barras</SelectItem>
+                      <SelectItem value="pie">Pizza</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
               <div className="grid gap-4 lg:grid-cols-5">
                 <div className="lg:col-span-3">
                 {daily.data && daily.data.length > 0 ? (
-                  <LineChartDaily data={daily.data} currency={filters.currency} />
+                  <LineChartDaily data={daily.data} currency={filters.currency} chartType={dailyChartType} />
                 ) : (
                   <Card>
                     <CardContent className="p-6 text-sm text-slate-500">Sem dados de evolução diária.</CardContent>
