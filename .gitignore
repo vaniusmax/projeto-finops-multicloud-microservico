@@ -48,3 +48,5 @@ projeto-finops-multicloud/
 **/.docker/
 **/tmp/
 **/.cache/
+*.zip
+*.zip
