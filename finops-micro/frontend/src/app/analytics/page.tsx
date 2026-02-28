@@ -1,13 +1,13 @@
 import { Suspense } from "react";
 
-import { OverviewModule } from "@/components/workspace/OverviewModule";
+import { AnalyticsModule } from "@/components/workspace/AnalyticsModule";
 import { WorkspacePage } from "@/components/workspace/WorkspacePage";
 
-export default function WeeklyPage() {
+export default function AnalyticsPage() {
   return (
     <Suspense fallback={<div className="min-h-screen bg-[#F4F6F7]" />}>
-      <WorkspacePage healthLabel="Weekly Deep Dive">
-        <OverviewModule />
+      <WorkspacePage healthLabel="Healthy">
+        <AnalyticsModule />
       </WorkspacePage>
     </Suspense>
   );

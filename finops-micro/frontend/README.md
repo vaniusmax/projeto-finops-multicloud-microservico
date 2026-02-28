@@ -1,6 +1,6 @@
 # FinOps Multicloud Frontend
 
-Frontend Next.js (App Router) para painel FinOps Multicloud com sidebar de filtros, dashboard interativo, drilldown semanal e assistente de IA.
+Frontend Next.js (App Router) para painel FinOps Multicloud com shell enterprise: sidebar de navegação, topbar global, drawer de filtros avançados e módulos funcionais.
 
 ## Stack
 
@@ -53,8 +53,30 @@ A seleção de base URL funciona assim:
 
 ## Rotas da UI
 
-- `/dashboard`: visão geral com KPIs, barras, linha, tabelas e aba IA
-- `/dashboard/weekly`: visão detalhada semanal
+- `/overview`: visão geral principal
+- `/analytics`: gráficos e tabelas operacionais
+- `/cost-explorer`: workspace para breakdowns
+- `/trends`: evolução temporal
+- `/budgets`: metas versus execução
+- `/ai`: assistente e insights
+- `/settings`: preferências do workspace
+- `/dashboard`: rota legada mantida, apontando para overview ou IA via `?tab=ai`
+- `/dashboard/weekly`: detalhamento semanal legado
+
+## Novo layout
+
+- `src/components/layout/AppShell.tsx`: shell principal com sidebar, topbar e workspace.
+- `src/components/layout/Topbar.tsx`: filtros globais de cloud, período, moeda, compare e refresh.
+- `src/components/layout/FilterDrawer.tsx`: filtros avançados de `topN`, serviços e linked accounts.
+- `src/components/layout/SidebarNav.tsx`: navegação lateral colapsável.
+- `src/contexts/AppContext.tsx`: estado global de UI e preferências locais.
+
+## Como os filtros funcionam
+
+- Filtros principais continuam serializados na URL (`cloud`, `from`, `to`, `currency`, `topN`, `services`, `accounts`).
+- `useDashboardFilters` mantém compatibilidade com os endpoints atuais e preserva outros query params, como `tab=ai`.
+- Preferências de layout (`compareMode`, sidebar colapsada e saved views) ficam em `localStorage`.
+- O drawer apenas muda a UI dos filtros avançados; as chamadas do backend permanecem as mesmas.
 
 ## Mocks tipados
 

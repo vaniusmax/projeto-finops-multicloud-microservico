@@ -7,13 +7,13 @@ const config: Config = {
     extend: {
       colors: {
         app: {
-          bg: "#F6F7F9",
+          bg: "#F4F6F7",
           text: "#111827",
-          muted: "#374151",
+          muted: "#6B7280",
           panel: "#FFFFFF",
-          sidebarFrom: "#0B5A3C",
-          sidebarVia: "#0F6A44",
-          sidebarTo: "#128055",
+          sidebarFrom: "#145A32",
+          sidebarVia: "#176C3C",
+          sidebarTo: "#1E8449",
           selected: "#E9F8EF",
         },
       },

@@ -38,9 +38,9 @@ function BarChartCostComponent({ data, currency, chartType = "bar" }: BarChartCo
   );
 
   return (
-    <Card className="border-none shadow-none">
-      <CardHeader className="flex-row items-center justify-between px-0 pb-0">
-        <CardTitle className="text-3xl tracking-normal text-slate-900">ANÁLISE DE DADOS</CardTitle>
+    <Card className="border-none bg-transparent shadow-none">
+      <CardHeader className="flex-row items-center justify-between px-2 pb-0 pt-4">
+        <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">ANÁLISE DE DADOS</CardTitle>
         <div className="hidden items-center gap-1 text-slate-400 lg:flex">
           <Camera className="h-3.5 w-3.5" />
           <Search className="h-3.5 w-3.5" />
@@ -49,7 +49,7 @@ function BarChartCostComponent({ data, currency, chartType = "bar" }: BarChartCo
           <Download className="h-3.5 w-3.5" />
         </div>
       </CardHeader>
-      <CardContent className="h-[320px] px-0">
+      <CardContent className="h-[320px] px-2">
         <ResponsiveContainer width="100%" height="100%">
           {chartType === "pie" ? (
             <PieChart>
