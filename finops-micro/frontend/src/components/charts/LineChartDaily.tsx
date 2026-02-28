@@ -69,11 +69,11 @@ function LineChartDailyComponent({ data, currency, title = "GRÁFICO DE LINHAS",
   );
 
   return (
-    <Card className="border-none shadow-none">
-      <CardHeader className="px-0">
-        <CardTitle className="text-3xl text-slate-900">{title}</CardTitle>
+    <Card className="border-none bg-transparent shadow-none">
+      <CardHeader className="px-2 pt-4">
+        <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="h-[320px] px-0">
+      <CardContent className="h-[320px] px-2">
         <ResponsiveContainer width="100%" height="100%">
           {chartType === "pie" ? (
             <PieChart>

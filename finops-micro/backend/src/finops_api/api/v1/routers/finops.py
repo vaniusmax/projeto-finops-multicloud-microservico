@@ -64,6 +64,43 @@ def _assert_data_coverage(db: Session, cloud: str, start: date, end: date) -> No
         )
 
 
+def _assert_data_available(db: Session, cloud: str, start: date, end: date) -> None:
+    repo = FactCostRepository(db)
+    providers = ["aws", "azure", "oci"] if cloud == "all" else [cloud]
+    missing: list[str] = []
+
+    for provider in providers:
+        if provider == "aws":
+            has_service_data = repo.has_source_data_in_range(
+                cloud="aws",
+                start=start,
+                end=end,
+                source_ref="aws_ce_service_cli",
+            )
+            has_account_data = repo.has_source_data_in_range(
+                cloud="aws",
+                start=start,
+                end=end,
+                source_ref="aws_ce_account_cli",
+            )
+            if not (has_service_data and has_account_data):
+                missing.append("aws")
+            continue
+        if not repo.has_data_in_range(provider, start, end):
+            missing.append(provider)
+
+    if missing:
+        missing_list = ", ".join(sorted(set(missing)))
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Sem dados suficientes para o período solicitado. "
+                f"Providers sem dados no intervalo: {missing_list}. "
+                "Execute refresh/reingest ou ajuste o período."
+            ),
+        )
+
+
 def parse_finops_filters(
     cloud: str = Query(default="all", pattern="^(aws|azure|oci|all)$"),
     from_date: date = Query(..., alias="from"),
@@ -118,7 +155,9 @@ def ensure_ingest_v2_summary(
         CurrencyRateSyncService(db).ensure_brl_usd_rate(reference_date)
     else:
         AutoIngestService(db).ensure_range(filters.cloud, year_start, reference_date)
-    _assert_data_coverage(db, filters.cloud, year_start, reference_date)
+    # O summary usa acumulados mensal/anual, mas o dashboard nao deve falhar
+    # apenas porque o provider ainda nao fechou o dia corrente.
+    _assert_data_available(db, filters.cloud, filters.start, filters.end)
     return filters
 
 

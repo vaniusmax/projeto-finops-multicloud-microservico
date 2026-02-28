@@ -5,12 +5,23 @@ import { useState } from "react";
 
 import { ToastProvider } from "@/components/ui/toaster";
 import { useToast } from "@/hooks/use-toast";
+import { ApiError } from "@/lib/api/http";
 
 function QueryProvider({ children }: { children: React.ReactNode }) {
   const { pushToast } = useToast();
   const [queryClient] = useState(
     () =>
       new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: (failureCount, error) => {
+              if (error instanceof ApiError && error.status >= 400 && error.status < 500) {
+                return false;
+              }
+              return failureCount < 2;
+            },
+          },
+        },
         queryCache: new QueryCache({
           onError: (error) => {
             pushToast({

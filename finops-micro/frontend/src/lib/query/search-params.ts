@@ -10,6 +10,8 @@ export type DashboardFilters = {
   accounts: string[];
 };
 
+export type CompareMode = "off" | "previous-period";
+
 export function parseFilters(searchParams: URLSearchParams): DashboardFilters {
   const defaults = getDefaultFilters();
   return {
@@ -36,5 +38,35 @@ export function toSearchParams(filters: DashboardFilters): URLSearchParams {
   if (filters.accounts.length > 0) {
     params.set("accounts", filters.accounts.join(","));
   }
+  return params;
+}
+
+export function mergeSearchParams(
+  current: URLSearchParams,
+  filters: DashboardFilters,
+  extras?: Record<string, string | null | undefined>,
+): URLSearchParams {
+  const params = new URLSearchParams(current.toString());
+  const filterParams = toSearchParams(filters);
+
+  ["cloud", "from", "to", "currency", "topN", "services", "accounts"].forEach((key) => {
+    params.delete(key);
+  });
+
+  filterParams.forEach((value, key) => {
+    params.set(key, value);
+  });
+
+  if (extras) {
+    Object.entries(extras).forEach(([key, value]) => {
+      if (value === undefined) return;
+      if (value === null || value === "") {
+        params.delete(key);
+        return;
+      }
+      params.set(key, value);
+    });
+  }
+
   return params;
 }

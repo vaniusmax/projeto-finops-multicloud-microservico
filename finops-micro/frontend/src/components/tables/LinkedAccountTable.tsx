@@ -34,17 +34,17 @@ export function LinkedAccountTable({ data, currency, title = "DADOS: LINKED ACCO
   const table = useReactTable({ data: rows, columns, getCoreRowModel: getCoreRowModel() });
 
   return (
-    <Card className="rounded-md border border-slate-200 shadow-none">
-      <CardHeader className="pb-2">
-        <CardTitle className="text-3xl text-slate-900">{title}</CardTitle>
+    <Card className="rounded-2xl border border-slate-200 bg-white shadow-soft">
+      <CardHeader className="border-b border-slate-100 pb-4">
+        <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">{title}</CardTitle>
       </CardHeader>
-      <CardContent className="max-h-[320px] overflow-y-auto p-0">
-        <Table className="text-[11px]">
+      <CardContent className="max-h-[360px] overflow-y-auto p-0">
+        <Table className="text-[12px]">
           <TableHeader>
             {table.getHeaderGroups().map((group) => (
               <TableRow key={group.id} className="hover:bg-transparent">
                 {group.headers.map((header) => (
-                  <TableHead key={header.id} className={`py-1.5 ${header.id.includes("total") ? "text-right" : ""}`}>
+                  <TableHead key={header.id} className={`py-3 ${header.id.includes("total") ? "text-right" : ""}`}>
                     {flexRender(header.column.columnDef.header, header.getContext())}
                   </TableHead>
                 ))}
@@ -53,17 +53,17 @@ export function LinkedAccountTable({ data, currency, title = "DADOS: LINKED ACCO
           </TableHeader>
           <TableBody>
             {table.getRowModel().rows.map((row) => (
-              <TableRow key={row.id} className="h-6">
+              <TableRow key={row.id} className="h-11">
                 {row.getVisibleCells().map((cell) => (
-                  <TableCell key={cell.id} className="py-1.5">
+                  <TableCell key={cell.id} className="py-2.5">
                     {flexRender(cell.column.columnDef.cell, cell.getContext())}
                   </TableCell>
                 ))}
               </TableRow>
             ))}
-            <TableRow className="h-6 font-semibold hover:bg-transparent">
-              <TableCell className="py-1.5">TOTAL</TableCell>
-              <TableCell className="py-1.5 text-right">{formatMoney(total, currency)}</TableCell>
+            <TableRow className="h-11 bg-slate-50 font-semibold hover:bg-slate-50">
+              <TableCell className="py-3">TOTAL</TableCell>
+              <TableCell className="py-3 text-right">{formatMoney(total, currency)}</TableCell>
             </TableRow>
           </TableBody>
         </Table>

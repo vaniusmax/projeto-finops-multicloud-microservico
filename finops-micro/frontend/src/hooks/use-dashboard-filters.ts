@@ -3,7 +3,7 @@
 import { useMemo } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
-import { parseFilters, toSearchParams, type DashboardFilters } from "@/lib/query/search-params";
+import { mergeSearchParams, parseFilters, type DashboardFilters } from "@/lib/query/search-params";
 
 export function useDashboardFilters() {
   const router = useRouter();
@@ -14,7 +14,7 @@ export function useDashboardFilters() {
 
   function updateFilters(patch: Partial<DashboardFilters>) {
     const next: DashboardFilters = { ...filters, ...patch };
-    const params = toSearchParams(next);
+    const params = mergeSearchParams(new URLSearchParams(searchParams.toString()), next);
     router.push(`${pathname}?${params.toString()}`);
   }
 

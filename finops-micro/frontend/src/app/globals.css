@@ -4,15 +4,31 @@
 
 :root {
   color-scheme: light;
+  --color-primary: #145a32;
+  --color-primary-hover: #1e8449;
+  --color-background: #f4f6f7;
+  --color-card: #ffffff;
+  --color-text: #111827;
+  --color-muted: #6b7280;
+  --color-border: #e5e7eb;
 }
 
 body {
   margin: 0;
-  background: #f6f7f9;
-  color: #111827;
+  background:
+    radial-gradient(circle at top right, rgba(20, 90, 50, 0.05), transparent 24%),
+    linear-gradient(180deg, #f9fbfb 0%, var(--color-background) 100%);
+  color: var(--color-text);
   font-family: "Plus Jakarta Sans", "Segoe UI", sans-serif;
 }
 
 * {
   box-sizing: border-box;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
 }

@@ -56,12 +56,12 @@ export function AiAssistant({ filters }: AiAssistantProps) {
   }
 
   return (
-    <Card>
-      <CardHeader>
-        <CardTitle>ASSISTENTE DE IA</CardTitle>
+    <Card className="rounded-2xl border border-slate-200 bg-white shadow-soft">
+      <CardHeader className="border-b border-slate-100 pb-4">
+        <CardTitle className="text-lg font-semibold tracking-tight text-slate-900">AI Assistant</CardTitle>
       </CardHeader>
       <CardContent>
-        <div className="mb-4 h-[360px] space-y-3 overflow-auto rounded-xl border border-slate-200 bg-slate-50 p-3">
+        <div className="mb-4 h-[420px] space-y-3 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
           {messages.length === 0 ? (
             <p className="text-sm text-slate-500">Faça uma pergunta sobre custos, variações ou otimizações.</p>
           ) : null}
@@ -69,7 +69,7 @@ export function AiAssistant({ filters }: AiAssistantProps) {
             <div
               key={`${message.role}-${index}`}
               className={`rounded-xl px-3 py-2 text-sm ${
-                message.role === "user" ? "ml-10 bg-emerald-700 text-white" : "mr-10 bg-white text-slate-800"
+                message.role === "user" ? "ml-10 bg-emerald-700 text-white shadow-sm" : "mr-10 border border-slate-200 bg-white text-slate-800"
               }`}
             >
               <p>{message.text}</p>

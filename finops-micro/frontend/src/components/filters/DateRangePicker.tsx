@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
+import { CalendarDays, ChevronLeft, ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 
 type DateRangePickerProps = {
@@ -103,28 +103,27 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
   }
 
   const months = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
+    "Janeiro",
+    "Fevereiro",
+    "Marco",
+    "Abril",
+    "Maio",
+    "Junho",
+    "Julho",
+    "Agosto",
+    "Setembro",
+    "Outubro",
+    "Novembro",
+    "Dezembro",
   ];
-
-  const years = Array.from({ length: 7 }, (_, i) => 2023 + i);
+  const baseYear = new Date().getFullYear();
+  const years = Array.from({ length: 7 }, (_, i) => baseYear - 3 + i);
 
   return (
     <div ref={ref} className="relative">
-      <label className="mb-1 block text-xs font-medium text-emerald-100">Período</label>
       <button
         type="button"
-        className="flex h-10 w-full items-center justify-between rounded-md border-2 border-red-400 bg-white px-3 text-sm text-slate-800"
+        className="flex h-11 w-full items-center justify-between rounded-xl border border-slate-200 bg-white px-3 text-sm text-slate-800 shadow-sm transition hover:border-emerald-200"
         onClick={() => {
           setOpen((value) => !value);
           setAnchorDate(null);
@@ -132,20 +131,27 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
           setRangeEnd(toDate);
         }}
       >
-        <span>{toDisplay(rangeStart)} - {toDisplay(rangeEnd)}</span>
+        <span className="inline-flex items-center gap-2">
+          <CalendarDays className="h-4 w-4 text-emerald-700" />
+          {toDisplay(rangeStart)} - {toDisplay(rangeEnd)}
+        </span>
       </button>
 
       {open ? (
-        <div className="absolute z-50 mt-0.5 w-[310px] rounded-b-md border border-slate-300 bg-white text-slate-800 shadow-soft">
-          <div className="flex items-center justify-between border-b border-slate-200 px-2 py-2 text-xs">
-            <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}>
+        <div className="absolute left-0 z-50 mt-2 w-[320px] rounded-2xl border border-slate-200 bg-white text-slate-800 shadow-soft">
+          <div className="flex items-center justify-between border-b border-slate-200 px-3 py-3 text-xs">
+            <button
+              type="button"
+              className="rounded-lg p-1 text-slate-500 transition hover:bg-slate-100"
+              onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() - 1, 1))}
+            >
               <ChevronLeft className="h-4 w-4" />
             </button>
             <div className="flex items-center gap-2">
               <select
                 value={viewDate.getMonth()}
                 onChange={(e) => setViewDate(new Date(viewDate.getFullYear(), Number(e.target.value), 1))}
-                className="rounded border-none bg-transparent text-xs"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
               >
                 {months.map((month, idx) => (
                   <option key={month} value={idx}>{month}</option>
@@ -154,14 +160,18 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
               <select
                 value={viewDate.getFullYear()}
                 onChange={(e) => setViewDate(new Date(Number(e.target.value), viewDate.getMonth(), 1))}
-                className="rounded border-none bg-transparent text-xs"
+                className="rounded-lg border border-slate-200 bg-slate-50 px-2 py-1 text-xs"
               >
                 {years.map((year) => (
                   <option key={year} value={year}>{year}</option>
                 ))}
               </select>
             </div>
-            <button type="button" onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}>
+            <button
+              type="button"
+              className="rounded-lg p-1 text-slate-500 transition hover:bg-slate-100"
+              onClick={() => setViewDate(new Date(viewDate.getFullYear(), viewDate.getMonth() + 1, 1))}
+            >
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -192,9 +202,9 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
                   onClick={() => handleSelect(date)}
                   className={`mx-auto my-0.5 h-8 w-8 rounded-full ${
                     selectedStart || selectedEnd
-                      ? "bg-red-500 text-white"
+                      ? "bg-emerald-700 text-white"
                       : inRange
-                        ? "bg-red-100 text-red-700"
+                        ? "bg-emerald-50 text-emerald-700"
                         : outside
                           ? "text-slate-300"
                           : "text-slate-700 hover:bg-slate-100"
@@ -205,13 +215,8 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
               );
             })}
           </div>
-
-          <div className="border-t border-slate-200 px-3 py-2 text-xs text-slate-700">
-            <p className="mb-2">Choose a date range</p>
-            <button type="button" className="flex w-full items-center justify-between rounded px-1 py-1 text-slate-500">
-              None
-              <ChevronDown className="h-3.5 w-3.5" />
-            </button>
+          <div className="border-t border-slate-200 px-3 py-3 text-xs text-slate-500">
+            Selecione data inicial e final no mesmo calendario.
           </div>
         </div>
       ) : null}
