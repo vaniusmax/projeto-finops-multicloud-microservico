@@ -76,7 +76,7 @@ class AzureCliClient:
         props = payload.get("properties", {})
         raw_rows = props.get("rows") or []
         columns = [c.get("name") for c in (props.get("columns") or [])]
-        currency = str(props.get("currency") or "USD")
+        default_currency = str(props.get("currency") or "BRL").strip().upper() or "BRL"
 
         parsed: list[CanonicalCostRow] = []
         for raw in raw_rows:
@@ -89,6 +89,11 @@ class AzureCliClient:
             subscription = str(item.get("SubscriptionName") or "Outros")
             region = str(item.get("ResourceLocation") or "global")
             amount = Decimal(str(item.get("PreTaxCost") or "0"))
+            currency = str(
+                item.get("Currency")
+                or item.get("BillingCurrency")
+                or default_currency
+            ).strip().upper() or default_currency
 
             parsed.append(
                 CanonicalCostRow(

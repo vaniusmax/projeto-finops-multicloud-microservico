@@ -24,6 +24,16 @@ class Settings(BaseSettings):
 
     aws_profile: str | None = Field(default=None, alias="AWS_PROFILE")
     aws_cli_path: str = Field(default="aws", alias="AWS_CLI_PATH")
+    aws_account_names_json: str = Field(
+        default=(
+            '{"555136764052":"Algar Brain VM","937406753822":"Algar Security",'
+            '"595949041525":"Algar Telecom","209663503877":"AlgarAppDEV",'
+            '"655629219208":"AlgarAppHOM","669477896728":"AlgarAppPRD",'
+            '"518919108570":"AlgarDataLakeDev","149748488652":"Estacao de Experiencias Digitais",'
+            '"838968885358":"Gestao de Marketplace DEV","752725527618":"poc-aiops"}'
+        ),
+        alias="AWS_ACCOUNT_NAMES_JSON",
+    )
 
     azure_management_group_id: str | None = Field(default=None, alias="AZURE_MANAGEMENT_GROUP_ID")
     azure_api_version: str = Field(default="2023-11-01", alias="AZURE_API_VERSION")
@@ -49,6 +59,12 @@ class Settings(BaseSettings):
         ),
         alias="MONTHLY_TARGETS_JSON",
     )
+    currency_rate_sync_on_request: bool = Field(default=True, alias="CURRENCY_RATE_SYNC_ON_REQUEST")
+    currency_rate_provider_url: str = Field(
+        default="https://economia.awesomeapi.com.br/json/daily/USD-BRL/1",
+        alias="CURRENCY_RATE_PROVIDER_URL",
+    )
+    currency_rate_timeout_seconds: float = Field(default=10.0, alias="CURRENCY_RATE_TIMEOUT_SECONDS")
     usd_rate_fallback: float | None = Field(default=5.1394, alias="USD_RATE_FALLBACK")
 
     model_config = SettingsConfigDict(

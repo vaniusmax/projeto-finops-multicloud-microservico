@@ -4,6 +4,7 @@ import argparse
 from datetime import date
 
 from finops_api.db.session import SessionLocal
+from finops_api.services.currency_rate_sync_service import CurrencyRateSyncService
 from finops_api.services.ingest_service import run_ingest_job
 
 
@@ -37,6 +38,9 @@ def main() -> None:
             print(
                 f"[{provider}] recebido={result['rows_received']} gravado={result['rows_written']}"
             )
+        rate = CurrencyRateSyncService(session).ensure_brl_usd_rate(end)
+        if rate is not None:
+            print(f"[currency] USD/BRL em {end.isoformat()} = {rate:.6f}")
 
 
 if __name__ == "__main__":

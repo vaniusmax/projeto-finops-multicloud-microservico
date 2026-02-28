@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
@@ -37,14 +38,44 @@ class RankedItem:
 class FactCostRepository:
     def __init__(self, db: Session) -> None:
         self.db = db
+        self.aws_account_names = self._load_aws_account_names()
 
     @staticmethod
     def _service_name_expr():
         return func.coalesce(DimService.service_name, FactCostDaily.service_key)
 
+    def _account_name_expr(self):
+        resolved_name = self._aws_account_name_case_expr()
+        return func.coalesce(
+            resolved_name,
+            DimScope.scope_name,
+            FactCostDaily.scope_key,
+        )
+
+    def _aws_account_name_case_expr(self):
+        if not self.aws_account_names:
+            return None
+
+        whens = []
+        for account_id, account_name in self.aws_account_names.items():
+            whens.append(
+                (
+                    (FactCostDaily.cloud == "aws") & (func.coalesce(DimScope.scope_key, FactCostDaily.scope_key) == account_id),
+                    literal(account_name),
+                )
+            )
+
+        return case(*whens, else_=None)
+
     @staticmethod
-    def _account_name_expr():
-        return func.coalesce(DimScope.scope_name, FactCostDaily.scope_key)
+    def _load_aws_account_names() -> dict[str, str]:
+        try:
+            raw = json.loads(settings.aws_account_names_json or "{}")
+        except json.JSONDecodeError:
+            return {}
+        if not isinstance(raw, dict):
+            return {}
+        return {str(key).strip(): str(value).strip() for key, value in raw.items() if str(key).strip()}
 
     @staticmethod
     def _apply_aws_source_scope(stmt, cloud: str, mode: str):
@@ -230,6 +261,7 @@ class FactCostRepository:
             .select_from(FactCostDaily)
             .where(FactCostDaily.usage_date.between(filters.start, filters.end))
             .where(FactCostDaily.amount_brl.is_not(None))
+            .where(FactCostDaily.currency_code == "USD")
         )
         if filters.cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == filters.cloud)

@@ -1,4 +1,4 @@
-import { DEFAULT_FILTERS } from "@/lib/constants";
+import { getDefaultFilters } from "@/lib/constants";
 
 export type DashboardFilters = {
   cloud: string;
@@ -11,12 +11,13 @@ export type DashboardFilters = {
 };
 
 export function parseFilters(searchParams: URLSearchParams): DashboardFilters {
+  const defaults = getDefaultFilters();
   return {
-    cloud: searchParams.get("cloud") ?? DEFAULT_FILTERS.cloud,
-    from: searchParams.get("from") ?? DEFAULT_FILTERS.from,
-    to: searchParams.get("to") ?? DEFAULT_FILTERS.to,
+    cloud: searchParams.get("cloud") ?? defaults.cloud,
+    from: searchParams.get("from") ?? defaults.from,
+    to: searchParams.get("to") ?? defaults.to,
     currency: searchParams.get("currency") === "USD" ? "USD" : "BRL",
-    topN: Number(searchParams.get("topN") ?? DEFAULT_FILTERS.topN),
+    topN: Number(searchParams.get("topN") ?? defaults.topN),
     services: searchParams.get("services")?.split(",").filter(Boolean) ?? [],
     accounts: searchParams.get("accounts")?.split(",").filter(Boolean) ?? [],
   };

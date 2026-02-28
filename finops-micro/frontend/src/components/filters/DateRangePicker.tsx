@@ -60,6 +60,7 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
   const [open, setOpen] = useState(false);
   const [rangeStart, setRangeStart] = useState<Date>(fromDate);
   const [rangeEnd, setRangeEnd] = useState<Date>(toDate);
+  const [anchorDate, setAnchorDate] = useState<Date | null>(null);
   const [viewDate, setViewDate] = useState<Date>(fromDate);
 
   const ref = useRef<HTMLDivElement>(null);
@@ -73,32 +74,31 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
     function onClickOutside(event: MouseEvent) {
       if (!ref.current?.contains(event.target as Node)) {
         setOpen(false);
+        setAnchorDate(null);
+        setRangeStart(fromDate);
+        setRangeEnd(toDate);
       }
     }
     document.addEventListener("mousedown", onClickOutside);
     return () => document.removeEventListener("mousedown", onClickOutside);
-  }, []);
+  }, [fromDate, toDate]);
 
   const days = useMemo(() => monthDays(viewDate), [viewDate]);
 
   function handleSelect(date: Date) {
-    if (!rangeStart || (rangeStart && rangeEnd)) {
+    if (!anchorDate) {
+      setAnchorDate(date);
       setRangeStart(date);
       setRangeEnd(date);
-      onChange({ from: toIso(date), to: toIso(date) });
       return;
     }
 
-    if (date < rangeStart) {
-      setRangeEnd(rangeStart);
-      setRangeStart(date);
-      onChange({ from: toIso(date), to: toIso(rangeStart) });
-      setOpen(false);
-      return;
-    }
-
-    setRangeEnd(date);
-    onChange({ from: toIso(rangeStart), to: toIso(date) });
+    const start = date < anchorDate ? date : anchorDate;
+    const end = date < anchorDate ? anchorDate : date;
+    setRangeStart(start);
+    setRangeEnd(end);
+    onChange({ from: toIso(start), to: toIso(end) });
+    setAnchorDate(null);
     setOpen(false);
   }
 
@@ -125,7 +125,12 @@ export function DateRangePicker({ from, to, onChange }: DateRangePickerProps) {
       <button
         type="button"
         className="flex h-10 w-full items-center justify-between rounded-md border-2 border-red-400 bg-white px-3 text-sm text-slate-800"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          setOpen((value) => !value);
+          setAnchorDate(null);
+          setRangeStart(fromDate);
+          setRangeEnd(toDate);
+        }}
       >
         <span>{toDisplay(rangeStart)} - {toDisplay(rangeEnd)}</span>
       </button>
