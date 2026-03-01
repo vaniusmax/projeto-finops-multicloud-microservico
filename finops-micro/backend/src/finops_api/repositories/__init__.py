@@ -1,1 +1,1 @@
-__all__ = ["fact_cost_repo", "dims_repo"]
+__all__ = ["fact_cost_repo", "currency_rate_repo"]

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from datetime import date
 
 import httpx
@@ -34,6 +35,27 @@ class FakeCurrencyRateRepo:
 
     def upsert_rate(self, rate_date: date, from_currency: str, to_currency: str, rate: float) -> None:
         self.upserts.append((rate_date, from_currency, to_currency, rate))
+
+
+class FakeAgentResponse:
+    def __init__(self, payload: dict[str, float]) -> None:
+        self._payload = payload
+
+    def get_content_as_string(self) -> str:
+        return json.dumps(self._payload)
+
+
+class FakeAgent:
+    def run(self, prompt: str, stream: bool = False) -> FakeAgentResponse:
+        assert "BRL=X" in prompt
+        assert stream is False
+        return FakeAgentResponse({"brl_per_usd": 5.42})
+
+
+class FakeToolkit:
+    def get_current_stock_price(self, symbol: str) -> str:
+        assert symbol == "BRL=X"
+        return "5.41"
 
 
 def test_ensure_brl_usd_rate_persists_quote_from_awesomeapi_payload(monkeypatch) -> None:
@@ -81,3 +103,34 @@ def test_ensure_brl_usd_rate_uses_existing_quote_without_remote_call(monkeypatch
     assert rate == 5.31
     assert db.commits == 0
     assert repo.upserts == []
+
+
+def test_ensure_brl_usd_rate_uses_agno_for_current_day(monkeypatch) -> None:
+    monkeypatch.setattr(settings, "currency_rate_sync_on_request", True)
+    monkeypatch.setattr(settings, "currency_rate_agno_enabled", True)
+    monkeypatch.setattr(settings, "currency_rate_yfinance_enabled", True)
+
+    today = date.today()
+    repo = FakeCurrencyRateRepo()
+    db = DummyDb()
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        raise AssertionError(f"Unexpected HTTP fallback call: {request.url}")
+
+    client = httpx.Client(transport=httpx.MockTransport(handler))
+    service = CurrencyRateSyncService(
+        db=db,
+        repo=repo,
+        client=client,
+        agent=FakeAgent(),
+        toolkit=FakeToolkit(),
+    )
+
+    rate = service.ensure_brl_usd_rate(today)
+
+    assert rate == 5.42
+    assert db.commits == 1
+    assert repo.upserts == [
+        (today, "USD", "BRL", 5.42),
+        (today, "BRL", "USD", 1 / 5.42),
+    ]

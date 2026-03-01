@@ -444,6 +444,104 @@ class FactCostRepository:
     def top_accounts_with_delta(self, filters: QueryFilters, limit: int) -> list[dict]:
         return self._top_ranked_with_delta(filters, limit=limit, group="account")
 
+    def cost_explorer_breakdown(self, filters: QueryFilters, limit: int, group_by: str) -> list[dict]:
+        group = "account" if group_by == "account" else "service"
+        items = (
+            self.top_accounts_with_delta(filters, limit)
+            if group == "account"
+            else self.top_services_with_delta(filters, limit)
+        )
+        positive_delta_total = sum(max(float(item.get("delta") or 0.0), 0.0) for item in items)
+        key_name = "linkedAccount" if group == "account" else "serviceName"
+
+        result: list[dict] = []
+        for item in items:
+            delta = float(item.get("delta") or 0.0)
+            contribution_pct = (max(delta, 0.0) / positive_delta_total * 100.0) if positive_delta_total > 0 else 0.0
+            label = str(item.get(key_name) or "N/A")
+            result.append(
+                {
+                    "key": label,
+                    "label": label,
+                    "total": float(item.get("total") or 0.0),
+                    "sharePct": float(item.get("sharePct") or 0.0),
+                    "delta": delta,
+                    "deltaPct": float(item.get("deltaPct") or 0.0),
+                    "contributionPct": contribution_pct,
+                }
+            )
+        return result
+
+    def cost_explorer_trend(
+        self,
+        filters: QueryFilters,
+        group_by: str,
+        selected_item: str | None,
+        limit: int = 5,
+    ) -> list[dict]:
+        group = "account" if group_by == "account" else "service"
+        name_col = self._account_name_expr() if group == "account" else self._service_name_expr()
+        join_scope = group == "service"
+        join_service = group == "account"
+        scope_joined = group == "account"
+        service_joined = group == "service"
+        amount_expr = self._amount_expr(filters.currency, filters.end)
+
+        focus_items = [selected_item] if selected_item else []
+        if not focus_items:
+            breakdown = self.cost_explorer_breakdown(filters, limit=limit, group_by=group)
+            focus_items = [item["label"] for item in breakdown[:limit] if item["label"]]
+
+        detail_stmt = (
+            select(
+                FactCostDaily.usage_date.label("date"),
+                name_col.label("name"),
+                func.coalesce(func.sum(amount_expr), 0).label("total"),
+            )
+            .select_from(FactCostDaily)
+            .group_by(FactCostDaily.usage_date, name_col)
+            .order_by(FactCostDaily.usage_date.asc())
+        )
+        if group == "service":
+            detail_stmt = detail_stmt.outerjoin(DimService, DimService.service_id == FactCostDaily.service_id)
+        else:
+            detail_stmt = detail_stmt.outerjoin(DimScope, DimScope.scope_id == FactCostDaily.scope_id)
+        detail_stmt = self._apply_filters(
+            detail_stmt,
+            filters,
+            join_scope=join_scope,
+            join_service=join_service,
+            scope_joined=scope_joined,
+            service_joined=service_joined,
+        )
+        detail_stmt = self._apply_aws_source_scope(detail_stmt, filters.cloud, group)
+        rows = self.db.execute(detail_stmt).all()
+
+        series_by_date: dict[date, dict[str, float]] = {}
+        for row in rows:
+            item_date = row.date
+            label = str(row.name or "N/A")
+            total = float(row.total or 0.0)
+            bucket = series_by_date.setdefault(item_date, {"total": 0.0, "selected": 0.0, "others": 0.0})
+            bucket["total"] += total
+            if label in focus_items:
+                bucket["selected"] += total
+            else:
+                bucket["others"] += total
+
+        result: list[dict] = []
+        for item_date in sorted(series_by_date.keys()):
+            row = series_by_date[item_date]
+            result.append(
+                {
+                    "date": item_date,
+                    "total": row["total"],
+                    "selected": row["selected"],
+                    "others": row["others"],
+                }
+            )
+        return result
+
     def filter_lists(self, cloud: str, month: str | None = None) -> dict[str, list[str]]:
         service_name = self._service_name_expr()
         account_name = self._account_name_expr()

@@ -12,6 +12,8 @@ dependencies = [
   "alembic>=1.16.4",
   "pydantic-settings>=2.10.1",
   "httpx>=0.28.1",
+  "agno>=0.1.0",
+  "openai>=1.12",
 ]
 
 [project.optional-dependencies]

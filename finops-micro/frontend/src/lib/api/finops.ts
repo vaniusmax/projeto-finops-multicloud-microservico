@@ -1,12 +1,22 @@
 import { request } from "@/lib/api/http";
 import {
   aiInsightSchema,
+  analyticsInsightSchema,
+  costExplorerBreakdownSchema,
+  costExplorerInsightSchema,
+  costExplorerSnapshotSchema,
+  costExplorerTrendSchema,
   dailySchema,
   filtersSchema,
   summarySchema,
   topAccountsSchema,
   topServicesSchema,
   type AiInsightResponse,
+  type AnalyticsInsightResponse,
+  type CostExplorerBreakdownResponse,
+  type CostExplorerInsightResponse,
+  type CostExplorerSnapshotResponse,
+  type CostExplorerTrendResponse,
   type DailyResponse,
   type FiltersResponse,
   type SummaryResponse,
@@ -79,6 +89,53 @@ export async function postAiInsights(payload: AiInsightPayload): Promise<AiInsig
     body: payload,
   });
   return aiInsightSchema.parse(data);
+}
+
+export type AnalyticsInsightPayload = CommonFilters & {
+  topN: number;
+  services?: string[];
+  accounts?: string[];
+};
+
+export async function postAnalyticsInsights(payload: AnalyticsInsightPayload): Promise<AnalyticsInsightResponse> {
+  const data = await request<unknown>({
+    method: "POST",
+    path: "/finops/analytics/insights",
+    body: payload,
+  });
+  return analyticsInsightSchema.parse(data);
+}
+
+export type CostExplorerParams = CommonFilters & {
+  topN: number;
+  groupBy: "service" | "account";
+  selectedItem?: string;
+  services?: string[];
+  accounts?: string[];
+};
+
+export async function getCostExplorerSnapshot(params: CostExplorerParams): Promise<CostExplorerSnapshotResponse> {
+  const data = await request<unknown>({ path: "/finops/cost-explorer/snapshot", query: params });
+  return costExplorerSnapshotSchema.parse(data);
+}
+
+export async function getCostExplorerBreakdown(params: CostExplorerParams): Promise<CostExplorerBreakdownResponse> {
+  const data = await request<unknown>({ path: "/finops/cost-explorer/breakdown", query: params });
+  return costExplorerBreakdownSchema.parse(data);
+}
+
+export async function getCostExplorerTrend(params: CostExplorerParams): Promise<CostExplorerTrendResponse> {
+  const data = await request<unknown>({ path: "/finops/cost-explorer/trend", query: params });
+  return costExplorerTrendSchema.parse(data);
+}
+
+export async function postCostExplorerInsights(payload: CostExplorerParams): Promise<CostExplorerInsightResponse> {
+  const data = await request<unknown>({
+    method: "POST",
+    path: "/finops/cost-explorer/insights",
+    body: payload,
+  });
+  return costExplorerInsightSchema.parse(data);
 }
 
 export type ReingestPayload = {

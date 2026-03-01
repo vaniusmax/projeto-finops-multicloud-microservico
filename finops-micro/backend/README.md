@@ -61,3 +61,21 @@ cd finops-micro/backend
 Auto-ingest no carregamento do frontend:
 - Ao chamar `summary`, `timeseries` ou `top-services`, a API tenta ingestao CLI automaticamente quando nao ha dados no intervalo solicitado.
 - Controle por env: `AUTO_INGEST_ON_REQUEST=true|false`.
+
+## Cotacao USD/BRL com Agno
+
+O backend continua persistindo a cotacao em `dim_currency_rate`, mas agora pode usar Agno + OpenAI + YFinance para buscar a taxa corrente antes do fallback HTTP.
+
+Ordem de tentativa para datas correntes:
+- `AgnoAgent` com `OpenAIChat` e `YFinanceTools`
+- `YFinanceTools` direto
+- provider HTTP configurado em `CURRENCY_RATE_PROVIDER_URL`
+
+Configuracao opcional no `.env`:
+- `CURRENCY_RATE_AGNO_ENABLED=true`
+- `CURRENCY_RATE_YFINANCE_ENABLED=true`
+- `OPENAI_API_KEY=...`
+- `OPENAI_MODEL=gpt-4o-mini`
+- `OPENAI_API_BASE=` opcional
+
+Se Agno/OpenAI nao estiverem disponiveis, a arquitetura atual segue funcionando via HTTP e persistencia normal na tabela canônica.

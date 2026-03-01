@@ -19,6 +19,11 @@ class AutoIngestService:
         self.repo = FactCostRepository(db)
 
     def ensure_range(self, cloud: str, start: date, end: date) -> None:
+        effective_end = self._effective_end(end)
+        if effective_end < start:
+            self._ensure_currency_rate(end)
+            return
+
         if not settings.auto_ingest_on_request:
             self._ensure_currency_rate(end)
             return
@@ -29,22 +34,22 @@ class AutoIngestService:
                 has_service_data = self.repo.has_source_data_covering_range(
                     cloud="aws",
                     start=start,
-                    end=end,
+                    end=effective_end,
                     source_ref="aws_ce_service_cli",
                 )
                 has_account_data = self.repo.has_source_data_covering_range(
                     cloud="aws",
                     start=start,
-                    end=end,
+                    end=effective_end,
                     source_ref="aws_ce_account_cli",
                 )
                 has_data = has_service_data and has_account_data
             else:
-                has_data = self.repo.has_data_covering_range(provider, start, end)
+                has_data = self.repo.has_data_covering_range(provider, start, effective_end)
             if has_data:
                 continue
             try:
-                result = run_ingest_job(self.db, provider=provider, start=start, end=end)
+                result = run_ingest_job(self.db, provider=provider, start=start, end=effective_end)
                 logger.info(
                     "Auto ingest executado para %s: recebido=%s gravado=%s",
                     provider,
@@ -63,3 +68,10 @@ class AutoIngestService:
         except Exception as exc:  # noqa: BLE001
             self.db.rollback()
             logger.warning("Sincronizacao de cotacao falhou para %s: %s", as_of.isoformat(), exc)
+
+    @staticmethod
+    def _effective_end(requested_end: date) -> date:
+        today = date.today()
+        if requested_end >= today:
+            return today.fromordinal(today.toordinal() - 1)
+        return requested_end

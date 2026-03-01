@@ -57,6 +57,122 @@ class AiInsightResponse(BaseModel):
     suggestedActions: list[str]
 
 
+class AnalyticsInsightRequest(BaseModel):
+    cloud: str
+    from_: date = Field(alias="from")
+    to: date
+    currency: str
+    topN: int = 10
+    services: list[str] | None = None
+    accounts: list[str] | None = None
+
+
+class AnalyticsInsightEvidence(BaseModel):
+    topServices: list[str] = Field(default_factory=list)
+    topAccounts: list[str] = Field(default_factory=list)
+    peakDay: date | None = None
+    totalPeriod: float
+    deltaPeriodPct: float
+
+
+class AnalyticsInsightAction(BaseModel):
+    title: str
+    owner: str
+    priority: str
+    rationale: str
+
+
+class AnalyticsInsightResponse(BaseModel):
+    mode: str
+    summary: str
+    drivers: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    actions: list[AnalyticsInsightAction] = Field(default_factory=list)
+    suggestedQuestions: list[str] = Field(default_factory=list)
+    evidence: AnalyticsInsightEvidence
+
+
+class CostExplorerSnapshotKpi(BaseModel):
+    label: str
+    value: float
+    sharePct: float
+    deltaPct: float
+
+
+class CostExplorerSnapshotResponse(BaseModel):
+    totalPeriod: float
+    deltaPeriodPct: float
+    top1SharePct: float
+    top3SharePct: float
+    peakDay: PeakDay
+    largestService: CostExplorerSnapshotKpi | None = None
+    largestAccount: CostExplorerSnapshotKpi | None = None
+
+
+class CostExplorerBreakdownItem(BaseModel):
+    key: str
+    label: str
+    total: float
+    sharePct: float
+    delta: float
+    deltaPct: float
+    contributionPct: float
+
+
+class CostExplorerTrendItem(BaseModel):
+    date: date
+    total: float
+    selected: float
+    others: float
+
+
+class CostExplorerInsightRequest(BaseModel):
+    cloud: str
+    from_: date = Field(alias="from")
+    to: date
+    currency: str
+    topN: int = 10
+    groupBy: str = "service"
+    selectedItem: str | None = None
+    services: list[str] | None = None
+    accounts: list[str] | None = None
+
+
+class CostExplorerInsightEvidence(BaseModel):
+    groupBy: str
+    selectedItem: str | None = None
+    totalPeriod: float
+    deltaPeriodPct: float
+    peakDay: date | None = None
+    topBreakdown: list[str] = Field(default_factory=list)
+    topServices: list[str] = Field(default_factory=list)
+    topAccounts: list[str] = Field(default_factory=list)
+
+
+class CostExplorerInsightAction(BaseModel):
+    title: str
+    owner: str
+    priority: str
+    rationale: str
+
+
+class CostExplorerNextDrilldown(BaseModel):
+    dimension: str
+    value: str
+    reason: str
+
+
+class CostExplorerInsightResponse(BaseModel):
+    mode: str
+    summary: str
+    drivers: list[str] = Field(default_factory=list)
+    risks: list[str] = Field(default_factory=list)
+    actions: list[CostExplorerInsightAction] = Field(default_factory=list)
+    suggestedQuestions: list[str] = Field(default_factory=list)
+    nextDrilldowns: list[CostExplorerNextDrilldown] = Field(default_factory=list)
+    evidence: CostExplorerInsightEvidence
+
+
 class ReingestRequest(BaseModel):
     cloud: str
     from_: date = Field(alias="from")

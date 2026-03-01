@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAppContext } from "@/contexts/AppContext";
+import { useToast } from "@/hooks/use-toast";
+import { postReingest } from "@/lib/api/finops";
 
 type TopbarProps = {
   showAdvancedFilters?: boolean;
@@ -24,6 +26,7 @@ const CLOUD_OPTIONS = [
 
 export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: TopbarProps) {
   const queryClient = useQueryClient();
+  const { pushToast } = useToast();
   const {
     filters,
     updateFilters,
@@ -36,6 +39,34 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
     applySavedView,
   } = useAppContext();
   const [viewName, setViewName] = useState("");
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  async function handleRefresh() {
+    setIsRefreshing(true);
+    try {
+      const result = await postReingest({
+        cloud: filters.cloud,
+        from: filters.from,
+        to: filters.to,
+      });
+      triggerRefresh();
+      await queryClient.invalidateQueries();
+
+      const providers = result.results.map((item) => item.provider.toUpperCase()).join(", ");
+      pushToast({
+        title: "Atualização concluída",
+        description: providers ? `Reingest executado para ${providers}.` : "Os dados foram atualizados.",
+      });
+    } catch (error) {
+      pushToast({
+        title: "Falha ao atualizar dados",
+        description: error instanceof Error ? error.message : "Tente novamente em instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setIsRefreshing(false);
+    }
+  }
 
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-[#F4F6F7]/95 backdrop-blur">
@@ -170,13 +201,11 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
 
           <Button
             className="h-auto rounded-xl bg-[#145A32] px-4 py-3 text-white hover:bg-[#1E8449]"
-            onClick={() => {
-              triggerRefresh();
-              void queryClient.invalidateQueries();
-            }}
+            onClick={() => void handleRefresh()}
+            disabled={isRefreshing}
           >
             <RefreshCcw className="mr-2 h-4 w-4" />
-            Refresh
+            {isRefreshing ? "Atualizando..." : "Refresh"}
           </Button>
         </div>
       </div>

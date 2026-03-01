@@ -3,7 +3,8 @@
 import { ArrowDownRight, ArrowUpRight } from "lucide-react";
 
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { formatCompactMoney, formatMoney, formatNumber, formatPct, type Currency } from "@/lib/format";
+import { InfoHint } from "@/components/ui/info-hint";
+import { formatCompactMoney, formatMoney, formatNumber, formatPct, formatPctValue, type Currency } from "@/lib/format";
 
 type KPIStatCardProps = {
   title: string;
@@ -11,9 +12,10 @@ type KPIStatCardProps = {
   currency: Currency;
   delta?: number;
   tone?: "default" | "hero";
-  valueType?: "money" | "compact-money" | "number";
+  valueType?: "money" | "compact-money" | "number" | "pct";
   subtitle?: string;
   onClick?: () => void;
+  hint?: string;
 };
 
 export function KPIStatCard({
@@ -25,28 +27,35 @@ export function KPIStatCard({
   valueType = "money",
   subtitle,
   onClick,
+  hint,
 }: KPIStatCardProps) {
   const displayValue =
     value == null
       ? "—"
       : valueType === "compact-money"
-        ? formatCompactMoney(value, currency)
+          ? formatCompactMoney(value, currency)
         : valueType === "number"
           ? formatNumber(value)
+          : valueType === "pct"
+            ? formatPctValue(value)
           : formatMoney(value, currency);
   const positive = (delta ?? 0) >= 0;
 
   return (
     <Card
       onClick={onClick}
+      title={hint}
       className={`rounded-2xl border shadow-soft transition ${
         tone === "hero"
           ? "border-emerald-200 bg-[linear-gradient(135deg,#145A32_0%,#1E8449_100%)] text-white"
           : "border-slate-200 bg-white text-slate-900"
-      } ${onClick ? "cursor-pointer hover:-translate-y-0.5" : ""}`}
+      } ${onClick ? "cursor-pointer hover:-translate-y-0.5" : ""} group relative`}
     >
       <CardHeader className="pb-2">
-        <p className={`text-xs font-semibold uppercase tracking-[0.22em] ${tone === "hero" ? "text-emerald-100" : "text-slate-500"}`}>{title}</p>
+        <div className="flex items-center justify-between gap-3">
+          <p className={`text-xs font-semibold uppercase tracking-[0.22em] ${tone === "hero" ? "text-emerald-100" : "text-slate-500"}`}>{title}</p>
+          {hint ? <InfoHint content={hint} tone={tone === "hero" ? "inverse" : "default"} alwaysVisibleOnParentHover /> : null}
+        </div>
       </CardHeader>
       <CardContent className="space-y-3">
         <div className={`font-semibold tracking-tight ${tone === "hero" ? "text-3xl" : "text-2xl"}`}>{displayValue}</div>

@@ -65,6 +65,12 @@ class Settings(BaseSettings):
         alias="CURRENCY_RATE_PROVIDER_URL",
     )
     currency_rate_timeout_seconds: float = Field(default=10.0, alias="CURRENCY_RATE_TIMEOUT_SECONDS")
+    currency_rate_agno_enabled: bool = Field(default=False, alias="CURRENCY_RATE_AGNO_ENABLED")
+    currency_rate_yfinance_enabled: bool = Field(default=True, alias="CURRENCY_RATE_YFINANCE_ENABLED")
+    currency_rate_yfinance_symbol: str = Field(default="BRL=X", alias="CURRENCY_RATE_YFINANCE_SYMBOL")
+    openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    openai_api_base: str | None = Field(default=None, alias="OPENAI_API_BASE")
     usd_rate_fallback: float | None = Field(default=5.1394, alias="USD_RATE_FALLBACK")
 
     model_config = SettingsConfigDict(

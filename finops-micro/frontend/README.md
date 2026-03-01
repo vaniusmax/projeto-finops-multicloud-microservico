@@ -22,6 +22,25 @@ npm run dev
 
 Aplicação em `http://localhost:3000`.
 
+Scripts recomendados:
+- `npm run dev`: desenvolvimento normal com `next dev`
+- `npm run dev:warmup`: desenvolvimento com prewarm das rotas mais usadas
+- `npm run serve:stable`: build + start em modo produção local, recomendado quando o ambiente apresentar instabilidade em assets `/_next/static/*`
+
+Os modos de execução agora usam diretórios separados:
+- `dev` e `dev:warmup` usam `.next-dev`
+- `build` e `start` usam `.next`
+
+Isso evita corrupção do artefato quando `next dev` e `next start` são usados em momentos diferentes no mesmo ambiente.
+
+Se quiser subir o Next puro, sem prewarm, use:
+
+```bash
+npm run dev:raw
+```
+
+Se o navegador entrar em estado inconsistente após reinícios, prefira `npm run serve:stable` em vez de `npm run dev`.
+
 ## Variáveis de ambiente
 
 Crie `.env.local`:
