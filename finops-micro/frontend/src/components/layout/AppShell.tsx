@@ -10,16 +10,12 @@ import { useDashboardFilters } from "@/hooks/use-dashboard-filters";
 
 type AppShellProps = {
   children: React.ReactNode;
-  services?: string[];
-  accounts?: string[];
   showAdvancedFilters?: boolean;
   healthLabel?: string;
 };
 
 export function AppShell({
   children,
-  services = [],
-  accounts = [],
   showAdvancedFilters = true,
   healthLabel,
 }: AppShellProps) {
@@ -28,7 +24,7 @@ export function AppShell({
 
   return (
     <AppProvider filters={filters} onUpdateFilters={updateFilters}>
-      <ShellFrame pathname={pathname} services={services} accounts={accounts} showAdvancedFilters={showAdvancedFilters} healthLabel={healthLabel}>
+      <ShellFrame pathname={pathname} showAdvancedFilters={showAdvancedFilters} healthLabel={healthLabel}>
         {children}
       </ShellFrame>
     </AppProvider>
@@ -37,8 +33,6 @@ export function AppShell({
 
 function ShellFrame({
   pathname,
-  services = [],
-  accounts = [],
   showAdvancedFilters,
   healthLabel,
   children,
@@ -52,7 +46,7 @@ function ShellFrame({
         <Topbar showAdvancedFilters={showAdvancedFilters} healthLabel={healthLabel} />
         <main className="px-4 py-6 lg:px-8">{children}</main>
       </div>
-      {showAdvancedFilters ? <FilterDrawer services={services} accounts={accounts} /> : null}
+      {showAdvancedFilters ? <FilterDrawer /> : null}
     </div>
   );
 }

@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { AnalyticsInsightPanel } from "@/components/analytics/AnalyticsInsightPanel";
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { SectionCard } from "@/components/dashboard/SectionCard";
 import { BarChartCost } from "@/components/charts/BarChartCost";
@@ -10,13 +11,14 @@ import { LinkedAccountTable } from "@/components/tables/LinkedAccountTable";
 import { TopServicesTable } from "@/components/tables/TopServicesTable";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAppContext } from "@/contexts/AppContext";
-import { useTopAccountsQuery, useTopServicesQuery } from "@/hooks/use-finops-queries";
+import { useAnalyticsInsightsQuery, useTopAccountsQuery, useTopServicesQuery } from "@/hooks/use-finops-queries";
 
 export function AnalyticsModule() {
   const { filters } = useAppContext();
   const [chartType, setChartType] = useState<"bar" | "line" | "pie">("bar");
   const topAccounts = useTopAccountsQuery(filters);
   const topServices = useTopServicesQuery(filters);
+  const insights = useAnalyticsInsightsQuery(filters);
 
   return (
     <div className="space-y-6">
@@ -25,6 +27,8 @@ export function AnalyticsModule() {
         <h1 className="mt-3 text-3xl font-semibold tracking-tight text-slate-900">Analytics workspace</h1>
         <p className="mt-1 text-sm text-slate-500">Investigação de contas e serviços com foco operacional.</p>
       </div>
+
+      <AnalyticsInsightPanel data={insights.data} isLoading={insights.isLoading} />
 
       <section className="grid gap-4 xl:grid-cols-5">
         <div className="xl:col-span-3">

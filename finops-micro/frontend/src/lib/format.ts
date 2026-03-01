@@ -32,6 +32,10 @@ export function formatPct(value: number) {
   return `${value >= 0 ? "+" : ""}${value.toFixed(2)}%`;
 }
 
+export function formatPctValue(value: number) {
+  return `${value.toFixed(1)}%`;
+}
+
 export function formatDateLabel(date: string) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(
     new Date(`${date}T00:00:00`),

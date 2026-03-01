@@ -9,8 +9,15 @@ from finops_api.api.v1.deps import get_analytics_service
 from finops_api.db.session import get_db
 from finops_api.repositories.fact_cost_repo import FactCostRepository, QueryFilters
 from finops_api.schemas.finops import (
+    AnalyticsInsightRequest,
+    AnalyticsInsightResponse,
     AiInsightRequest,
     AiInsightResponse,
+    CostExplorerBreakdownItem,
+    CostExplorerInsightRequest,
+    CostExplorerInsightResponse,
+    CostExplorerSnapshotResponse,
+    CostExplorerTrendItem,
     DailyItem,
     FiltersV2Response,
     RankedItemV2,
@@ -20,7 +27,10 @@ from finops_api.schemas.finops import (
     SummaryV2Response,
 )
 from finops_api.services.analytics_service import AnalyticsService
+from finops_api.services.analytics_insight_service import AnalyticsInsightService
 from finops_api.services.auto_ingest_service import AutoIngestService
+from finops_api.services.cost_explorer_insight_service import CostExplorerInsightService
+from finops_api.services.cost_explorer_service import CostExplorerService
 from finops_api.services.currency_rate_sync_service import CurrencyRateSyncService
 from finops_api.services.ingest_service import run_ingest_job
 
@@ -161,6 +171,10 @@ def ensure_ingest_v2_summary(
     return filters
 
 
+def parse_group_by(group_by: str = Query(default="service", alias="groupBy", pattern="^(service|account)$")) -> str:
+    return group_by
+
+
 @router.get("/summary", response_model=SummaryV2Response)
 def get_summary_v2(
     filters: QueryFilters = Depends(ensure_ingest_v2_summary),
@@ -238,6 +252,80 @@ def post_ai_insights_v2(payload: AiInsightRequest) -> AiInsightResponse:
             "Validar políticas de retenção/lifecycle para storage.",
             "Avaliar savings plans ou reservas para workloads estáveis.",
         ],
+    )
+
+
+@router.post("/analytics/insights", response_model=AnalyticsInsightResponse)
+def post_analytics_insights_v2(
+    payload: AnalyticsInsightRequest,
+    service: AnalyticsService = Depends(get_analytics_service),
+) -> AnalyticsInsightResponse:
+    filters = QueryFilters(
+        cloud=payload.cloud,
+        start=payload.from_,
+        end=payload.to,
+        currency=payload.currency,
+        services=payload.services or None,
+        accounts=payload.accounts or None,
+    )
+    return AnalyticsInsightService(service).generate(filters=filters, top_n=payload.topN)
+
+
+@router.get("/cost-explorer/snapshot", response_model=CostExplorerSnapshotResponse)
+def get_cost_explorer_snapshot_v2(
+    filters: QueryFilters = Depends(ensure_ingest_v2_summary),
+    top_n: int = Query(default=10, alias="topN", ge=1, le=50),
+    service: AnalyticsService = Depends(get_analytics_service),
+) -> CostExplorerSnapshotResponse:
+    return CostExplorerService(service).snapshot(filters=filters, top_n=top_n)
+
+
+@router.get("/cost-explorer/breakdown", response_model=list[CostExplorerBreakdownItem])
+def get_cost_explorer_breakdown_v2(
+    filters: QueryFilters = Depends(ensure_ingest_v2_refreshable),
+    group_by: str = Depends(parse_group_by),
+    top_n: int = Query(default=10, alias="topN", ge=1, le=50),
+    service: AnalyticsService = Depends(get_analytics_service),
+) -> list[CostExplorerBreakdownItem]:
+    return CostExplorerService(service).breakdown(filters=filters, top_n=top_n, group_by=group_by)
+
+
+@router.get("/cost-explorer/trend", response_model=list[CostExplorerTrendItem])
+def get_cost_explorer_trend_v2(
+    filters: QueryFilters = Depends(ensure_ingest_v2_refreshable),
+    group_by: str = Depends(parse_group_by),
+    selected_item: str | None = Query(default=None, alias="selectedItem"),
+    top_n: int = Query(default=10, alias="topN", ge=1, le=50),
+    service: AnalyticsService = Depends(get_analytics_service),
+) -> list[CostExplorerTrendItem]:
+    return CostExplorerService(service).trend(
+        filters=filters,
+        group_by=group_by,
+        selected_item=selected_item,
+        top_n=top_n,
+    )
+
+
+@router.post("/cost-explorer/insights", response_model=CostExplorerInsightResponse)
+def post_cost_explorer_insights_v2(
+    payload: CostExplorerInsightRequest,
+    service: AnalyticsService = Depends(get_analytics_service),
+    db: Session = Depends(get_db),
+) -> CostExplorerInsightResponse:
+    AutoIngestService(db).ensure_range(payload.cloud, payload.from_, payload.to)
+    filters = QueryFilters(
+        cloud=payload.cloud,
+        start=payload.from_,
+        end=payload.to,
+        currency=payload.currency,
+        services=payload.services or None,
+        accounts=payload.accounts or None,
+    )
+    return CostExplorerInsightService(CostExplorerService(service)).generate(
+        filters=filters,
+        top_n=payload.topN,
+        group_by=payload.groupBy,
+        selected_item=payload.selectedItem,
     )
 
 

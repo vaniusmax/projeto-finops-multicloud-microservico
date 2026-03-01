@@ -6,11 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { useAppContext } from "@/contexts/AppContext";
-
-type FilterDrawerProps = {
-  services: string[];
-  accounts: string[];
-};
+import { useFilterOptionsQuery } from "@/hooks/use-finops-queries";
 
 function ToggleGroup({
   title,
@@ -57,8 +53,12 @@ function ToggleGroup({
   );
 }
 
-export function FilterDrawer({ services, accounts }: FilterDrawerProps) {
+export function FilterDrawer() {
   const { filters, updateFilters, isFilterDrawerOpen, setFilterDrawerOpen } = useAppContext();
+  const month = filters.from.slice(0, 7);
+  const filterOptions = useFilterOptionsQuery(filters.cloud, month, isFilterDrawerOpen);
+  const services = filterOptions.data?.services ?? [];
+  const accounts = filterOptions.data?.accounts ?? [];
 
   if (!isFilterDrawerOpen) return null;
 

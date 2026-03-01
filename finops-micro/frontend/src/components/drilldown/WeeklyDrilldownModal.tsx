@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { LineChartDaily } from "@/components/charts/LineChartDaily";
 import { KpiCard } from "@/components/kpi/KpiCard";
@@ -33,6 +33,7 @@ export function WeeklyDrilldownModal({
   currency,
   filters,
 }: WeeklyDrilldownModalProps) {
+  const router = useRouter();
   const params = new URLSearchParams({
     cloud: filters.cloud,
     from: filters.from,
@@ -68,9 +69,14 @@ export function WeeklyDrilldownModal({
         </div>
 
         <div className="mt-4 flex justify-end">
-          <Link href={`/dashboard/weekly?${params.toString()}`}>
-            <Button>Abrir visão detalhada</Button>
-          </Link>
+          <Button
+            onClick={() => {
+              onOpenChange(false);
+              router.push(`/dashboard/weekly?${params.toString()}`);
+            }}
+          >
+            Abrir visão detalhada
+          </Button>
         </div>
       </DialogContent>
     </Dialog>
