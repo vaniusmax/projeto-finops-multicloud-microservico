@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { ArrowLeft, CalendarRange, Layers3, LineChart, Wallet } from "lucide-react";
+import { ArrowLeft, CalendarRange, FileOutput, Layers3, LineChart, Wallet } from "lucide-react";
+import { useState } from "react";
 
 import { EmptyState } from "@/components/dashboard/EmptyState";
 import { LoadingGrid } from "@/components/dashboard/LoadingGrid";
@@ -11,12 +12,16 @@ import { LineChartDaily } from "@/components/charts/LineChartDaily";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { LinkedAccountTable } from "@/components/tables/LinkedAccountTable";
 import { TopServicesTable } from "@/components/tables/TopServicesTable";
+import { Button } from "@/components/ui/button";
 import { useAppContext } from "@/contexts/AppContext";
 import { useDailyQuery, useSummaryQuery, useTopAccountsQuery, useTopServicesQuery } from "@/hooks/use-finops-queries";
 import { formatCompactMoney, formatMoney, formatNumber, formatPct } from "@/lib/format";
+import { toSearchParams } from "@/lib/query/search-params";
+import { openWeeklyDetailReport } from "@/lib/reports/weekly-detail-report";
 
 export function WeeklyDetailModule() {
   const { filters } = useAppContext();
+  const [isExportingPdf, setIsExportingPdf] = useState(false);
 
   const summary = useSummaryQuery(filters);
   const daily = useDailyQuery(filters);
@@ -25,6 +30,26 @@ export function WeeklyDetailModule() {
 
   const isLoading = summary.isLoading || daily.isLoading || topServices.isLoading || topAccounts.isLoading;
   const hasData = Boolean(summary.data && daily.data && topServices.data && topAccounts.data);
+  const overviewHref = `/overview?${toSearchParams(filters).toString()}`;
+
+  function handleExportPdf() {
+    if (!summary.data || !daily.data || !topServices.data || !topAccounts.data) {
+      return;
+    }
+
+    setIsExportingPdf(true);
+    openWeeklyDetailReport({
+      cloud: filters.cloud,
+      from: filters.from,
+      to: filters.to,
+      currency: filters.currency,
+      summary: summary.data,
+      daily: daily.data,
+      topServices: topServices.data,
+      topAccounts: topAccounts.data,
+    });
+    window.setTimeout(() => setIsExportingPdf(false), 300);
+  }
 
   return (
     <div className="space-y-6">
@@ -33,7 +58,7 @@ export function WeeklyDetailModule() {
           <Breadcrumbs
             items={[
               { label: filters.cloud.toUpperCase() },
-              { label: "Overview", href: `/overview?cloud=${filters.cloud}&from=${filters.from}&to=${filters.to}&currency=${filters.currency}&topN=${filters.topN}` },
+              { label: "Overview", href: overviewHref },
               { label: "Weekly Detail" },
             ]}
           />
@@ -45,13 +70,26 @@ export function WeeklyDetailModule() {
           </div>
         </div>
 
-        <Link
-          href={`/overview?cloud=${filters.cloud}&from=${filters.from}&to=${filters.to}&currency=${filters.currency}&topN=${filters.topN}`}
-          className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50"
-        >
-          <ArrowLeft className="mr-2 h-4 w-4" />
-          Voltar ao overview
-        </Link>
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            type="button"
+            variant="default"
+            onClick={handleExportPdf}
+            disabled={!hasData || isLoading || isExportingPdf}
+            className="bg-emerald-700 px-4 py-2 text-sm font-semibold hover:bg-emerald-800"
+          >
+            <FileOutput className="mr-2 h-4 w-4" />
+            {isExportingPdf ? "Gerando PDF..." : "Emitir PDF"}
+          </Button>
+
+          <Link
+            href={overviewHref}
+            className="inline-flex items-center justify-center rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-900 transition-colors hover:bg-slate-50"
+          >
+            <ArrowLeft className="mr-2 h-4 w-4" />
+            Voltar ao overview
+          </Link>
+        </div>
       </div>
 
       {isLoading ? <LoadingGrid cards={6} /> : null}

@@ -36,6 +36,7 @@ export function WeeklyDrilldownModal({
   const router = useRouter();
   const params = new URLSearchParams({
     cloud: filters.cloud,
+    tenant: filters.tenant,
     from: filters.from,
     to: filters.to,
     currency: filters.currency,

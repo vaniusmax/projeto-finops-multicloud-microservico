@@ -42,8 +42,15 @@ class FiltersV2Response(BaseModel):
     accounts: list[str] = Field(default_factory=list)
 
 
+class TenantOption(BaseModel):
+    tenantKey: str
+    tenantName: str
+    cloud: str
+
+
 class AiInsightRequest(BaseModel):
     cloud: str
+    tenant_key: str | None = None
     from_: date = Field(alias="from")
     to: date
     currency: str
@@ -59,6 +66,7 @@ class AiInsightResponse(BaseModel):
 
 class AnalyticsInsightRequest(BaseModel):
     cloud: str
+    tenant_key: str | None = None
     from_: date = Field(alias="from")
     to: date
     currency: str
@@ -128,6 +136,7 @@ class CostExplorerTrendItem(BaseModel):
 
 class CostExplorerInsightRequest(BaseModel):
     cloud: str
+    tenant_key: str | None = None
     from_: date = Field(alias="from")
     to: date
     currency: str
@@ -175,6 +184,7 @@ class CostExplorerInsightResponse(BaseModel):
 
 class ReingestRequest(BaseModel):
     cloud: str
+    tenant_key: str | None = None
     from_: date = Field(alias="from")
     to: date
 

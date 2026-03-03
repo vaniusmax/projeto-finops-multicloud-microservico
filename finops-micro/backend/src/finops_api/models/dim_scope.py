@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import uuid
 
-from sqlalchemy import String, UniqueConstraint, text
+from sqlalchemy import ForeignKey, String, UniqueConstraint, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -11,9 +11,10 @@ from finops_api.db.base import Base
 
 class DimScope(Base):
     __tablename__ = "dim_scope"
-    __table_args__ = (UniqueConstraint("cloud", "scope_key"),)
+    __table_args__ = (UniqueConstraint("tenant_id", "scope_key"),)
 
     scope_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("dim_tenant.tenant_id"), nullable=False, index=True)
     cloud: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     scope_type: Mapped[str] = mapped_column(
         String(32),
@@ -24,4 +25,5 @@ class DimScope(Base):
     scope_name: Mapped[str | None] = mapped_column(String(256), nullable=True)
     metadata_json: Mapped[dict] = mapped_column("metadata", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
 
+    tenant = relationship("DimTenant", back_populates="scopes")
     costs = relationship("FactCostDaily", back_populates="scope")

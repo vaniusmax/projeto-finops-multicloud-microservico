@@ -23,6 +23,7 @@ class Settings(BaseSettings):
     )
 
     aws_profile: str | None = Field(default=None, alias="AWS_PROFILE")
+    aws_tenants: str = Field(default="", alias="AWS_TENANTS")
     aws_cli_path: str = Field(default="aws", alias="AWS_CLI_PATH")
     aws_account_names_json: str = Field(
         default=(
@@ -36,13 +37,16 @@ class Settings(BaseSettings):
     )
 
     azure_management_group_id: str | None = Field(default=None, alias="AZURE_MANAGEMENT_GROUP_ID")
+    azure_tenants: str = Field(default="", alias="AZURE_TENANTS")
     azure_api_version: str = Field(default="2023-11-01", alias="AZURE_API_VERSION")
     azure_cli_path: str = Field(default="az", alias="AZURE_CLI_PATH")
 
     oci_tenant_id: str | None = Field(default=None, alias="OCI_TENANT_ID")
     oci_profile: str = Field(default="DEFAULT", alias="OCI_PROFILE")
+    oci_tenants: str = Field(default="", alias="OCI_TENANTS")
     oci_region: str = Field(default="sa-saopaulo-1", alias="OCI_REGION")
     oci_cli_path: str = Field(default="oci", alias="OCI_CLI_PATH")
+    tenant_configs_json: str = Field(default="{}", alias="TENANT_CONFIGS_JSON")
 
     target_monthly_brl: float = Field(default=331894.50, alias="TARGET_MONTHLY_BRL")
     target_weekly_brl: float = Field(default=82973.625, alias="TARGET_WEEKLY_BRL")

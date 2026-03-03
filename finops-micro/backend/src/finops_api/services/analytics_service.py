@@ -34,6 +34,8 @@ class AnalyticsService:
             start=filters.start - timedelta(days=week_days),
             end=filters.start - timedelta(days=1),
             currency=filters.currency,
+            tenant_id=filters.tenant_id,
+            tenant_key=filters.tenant_key,
             services=filters.services,
             accounts=filters.accounts,
         )
@@ -51,6 +53,8 @@ class AnalyticsService:
             start=month_start,
             end=reference_date,
             currency=filters.currency,
+            tenant_id=filters.tenant_id,
+            tenant_key=filters.tenant_key,
             services=filters.services,
             accounts=filters.accounts,
         )
@@ -60,6 +64,8 @@ class AnalyticsService:
             start=year_start,
             end=reference_date,
             currency=filters.currency,
+            tenant_id=filters.tenant_id,
+            tenant_key=filters.tenant_key,
             services=filters.services,
             accounts=filters.accounts,
         )
@@ -85,6 +91,8 @@ class AnalyticsService:
                     start=year_start,
                     end=reference_date,
                     currency=filters.currency,
+                    tenant_id=filters.tenant_id,
+                    tenant_key=filters.tenant_key,
                     services=filters.services,
                     accounts=filters.accounts,
                 )
@@ -121,6 +129,8 @@ class AnalyticsService:
             start=filters.start - timedelta(days=range_days),
             end=filters.start - timedelta(days=1),
             currency=filters.currency,
+            tenant_id=filters.tenant_id,
+            tenant_key=filters.tenant_key,
             services=filters.services,
             accounts=filters.accounts,
         )
@@ -160,5 +170,5 @@ class AnalyticsService:
     def top_accounts_v2(self, filters: QueryFilters, limit: int) -> list[dict]:
         return self.fact_repo.top_accounts_with_delta(filters, limit)
 
-    def filters_v2(self, cloud: str, month: str | None = None) -> dict[str, list[str]]:
-        return self.fact_repo.filter_lists(cloud=cloud, month=month)
+    def filters_v2(self, cloud: str, month: str | None = None, tenant_id=None) -> dict[str, list[str]]:
+        return self.fact_repo.filter_lists(cloud=cloud, month=month, tenant_id=tenant_id)

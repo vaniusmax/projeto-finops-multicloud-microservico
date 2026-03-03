@@ -25,6 +25,7 @@ from finops_api.schemas.finops import (
     ReingestResponse,
     ReingestResult,
     SummaryV2Response,
+    TenantOption,
 )
 from finops_api.services.analytics_service import AnalyticsService
 from finops_api.services.analytics_insight_service import AnalyticsInsightService
@@ -33,11 +34,21 @@ from finops_api.services.cost_explorer_insight_service import CostExplorerInsigh
 from finops_api.services.cost_explorer_service import CostExplorerService
 from finops_api.services.currency_rate_sync_service import CurrencyRateSyncService
 from finops_api.services.ingest_service import run_ingest_job
+from finops_api.services.tenant_service import TenantService
 
 router = APIRouter(prefix="/finops", tags=["finops-v2"])
 
 
-def _assert_data_coverage(db: Session, cloud: str, start: date, end: date) -> None:
+def _tenant_keys_for_request(db: Session, cloud: str, requested_tenant_key: str | None) -> list[str | None]:
+    if requested_tenant_key:
+        return [requested_tenant_key]
+    runtime_configs = TenantService(db).get_runtime_configs(cloud)
+    if runtime_configs:
+        return [config.tenant_key for config in runtime_configs]
+    return [None]
+
+
+def _assert_data_coverage(db: Session, cloud: str, start: date, end: date, tenant_id=None) -> None:
     repo = FactCostRepository(db)
     providers = ["aws", "azure", "oci"] if cloud == "all" else [cloud]
     missing: list[str] = []
@@ -49,17 +60,19 @@ def _assert_data_coverage(db: Session, cloud: str, start: date, end: date) -> No
                 start=start,
                 end=end,
                 source_ref="aws_ce_service_cli",
+                tenant_id=tenant_id,
             )
             has_account_data = repo.has_source_data_covering_range(
                 cloud="aws",
                 start=start,
                 end=end,
                 source_ref="aws_ce_account_cli",
+                tenant_id=tenant_id,
             )
             if not (has_service_data and has_account_data):
                 missing.append("aws")
             continue
-        if not repo.has_data_covering_range(provider, start, end):
+        if not repo.has_data_covering_range(provider, start, end, tenant_id=tenant_id):
             missing.append(provider)
 
     if missing:
@@ -74,7 +87,7 @@ def _assert_data_coverage(db: Session, cloud: str, start: date, end: date) -> No
         )
 
 
-def _assert_data_available(db: Session, cloud: str, start: date, end: date) -> None:
+def _assert_data_available(db: Session, cloud: str, start: date, end: date, tenant_id=None) -> None:
     repo = FactCostRepository(db)
     providers = ["aws", "azure", "oci"] if cloud == "all" else [cloud]
     missing: list[str] = []
@@ -86,17 +99,19 @@ def _assert_data_available(db: Session, cloud: str, start: date, end: date) -> N
                 start=start,
                 end=end,
                 source_ref="aws_ce_service_cli",
+                tenant_id=tenant_id,
             )
             has_account_data = repo.has_source_data_in_range(
                 cloud="aws",
                 start=start,
                 end=end,
                 source_ref="aws_ce_account_cli",
+                tenant_id=tenant_id,
             )
             if not (has_service_data and has_account_data):
                 missing.append("aws")
             continue
-        if not repo.has_data_in_range(provider, start, end):
+        if not repo.has_data_in_range(provider, start, end, tenant_id=tenant_id):
             missing.append(provider)
 
     if missing:
@@ -113,6 +128,7 @@ def _assert_data_available(db: Session, cloud: str, start: date, end: date) -> N
 
 def parse_finops_filters(
     cloud: str = Query(default="all", pattern="^(aws|azure|oci|all)$"),
+    tenant_key: str | None = Query(default=None, alias="tenant_key"),
     from_date: date = Query(..., alias="from"),
     to_date: date = Query(..., alias="to"),
     currency: str = Query(default="BRL", pattern="^(BRL|USD)$"),
@@ -121,18 +137,23 @@ def parse_finops_filters(
 ) -> QueryFilters:
     if from_date > to_date:
         raise ValueError("from deve ser menor ou igual a to")
+    tenant = TenantService(db=None)  # type: ignore[arg-type]
+    tenant.require_tenant_key(cloud, tenant_key)
     return QueryFilters(
         cloud=cloud,
         start=from_date,
         end=to_date,
         currency=currency,
+        tenant_key=tenant_key,
         services=services or None,
         accounts=accounts or None,
     )
 
 
 def ensure_ingest_v2(filters: QueryFilters = Depends(parse_finops_filters), db: Session = Depends(get_db)) -> QueryFilters:
-    AutoIngestService(db).ensure_range(filters.cloud, filters.start, filters.end)
+    tenant = TenantService(db).resolve_tenant(filters.cloud, filters.tenant_key)
+    filters.tenant_id = tenant.tenant_id if tenant else None
+    AutoIngestService(db).ensure_range(filters.cloud, filters.start, filters.end, tenant_key=filters.tenant_key)
     return filters
 
 
@@ -141,13 +162,17 @@ def ensure_ingest_v2_refreshable(
     refresh: bool = Query(default=False),
     db: Session = Depends(get_db),
 ) -> QueryFilters:
+    tenant = TenantService(db).resolve_tenant(filters.cloud, filters.tenant_key)
+    filters.tenant_id = tenant.tenant_id if tenant else None
     if refresh:
         providers = ["aws", "azure", "oci"] if filters.cloud == "all" else [filters.cloud]
         for provider in providers:
-            run_ingest_job(db, provider=provider, start=filters.start, end=filters.end)
+            tenant_keys = _tenant_keys_for_request(db, provider, filters.tenant_key if provider == filters.cloud else None)
+            for current_tenant_key in tenant_keys:
+                run_ingest_job(db, provider=provider, start=filters.start, end=filters.end, tenant_key=current_tenant_key)
         CurrencyRateSyncService(db).ensure_brl_usd_rate(filters.end)
     else:
-        AutoIngestService(db).ensure_range(filters.cloud, filters.start, filters.end)
+        AutoIngestService(db).ensure_range(filters.cloud, filters.start, filters.end, tenant_key=filters.tenant_key)
     return filters
 
 
@@ -158,16 +183,20 @@ def ensure_ingest_v2_summary(
 ) -> QueryFilters:
     reference_date = filters.end
     year_start = reference_date.replace(month=1, day=1)
+    tenant = TenantService(db).resolve_tenant(filters.cloud, filters.tenant_key)
+    filters.tenant_id = tenant.tenant_id if tenant else None
     if refresh:
         providers = ["aws", "azure", "oci"] if filters.cloud == "all" else [filters.cloud]
         for provider in providers:
-            run_ingest_job(db, provider=provider, start=year_start, end=reference_date)
+            tenant_keys = _tenant_keys_for_request(db, provider, filters.tenant_key if provider == filters.cloud else None)
+            for current_tenant_key in tenant_keys:
+                run_ingest_job(db, provider=provider, start=year_start, end=reference_date, tenant_key=current_tenant_key)
         CurrencyRateSyncService(db).ensure_brl_usd_rate(reference_date)
     else:
-        AutoIngestService(db).ensure_range(filters.cloud, year_start, reference_date)
+        AutoIngestService(db).ensure_range(filters.cloud, year_start, reference_date, tenant_key=filters.tenant_key)
     # O summary usa acumulados mensal/anual, mas o dashboard nao deve falhar
     # apenas porque o provider ainda nao fechou o dia corrente.
-    _assert_data_available(db, filters.cloud, filters.start, filters.end)
+    _assert_data_available(db, filters.cloud, filters.start, filters.end, tenant_id=filters.tenant_id)
     return filters
 
 
@@ -225,13 +254,31 @@ def get_top_accounts_v2(
 @router.get("/filters", response_model=FiltersV2Response)
 def get_filters_v2(
     cloud: str = Query(default="all", pattern="^(aws|azure|oci|all)$"),
+    tenant_key: str | None = Query(default=None, alias="tenant_key"),
     month: str | None = Query(default=None),
     service: AnalyticsService = Depends(get_analytics_service),
+    db: Session = Depends(get_db),
 ) -> FiltersV2Response:
     try:
-        return FiltersV2Response(**service.filters_v2(cloud=cloud, month=month))
+        tenant = TenantService(db).resolve_tenant(cloud, tenant_key)
+        return FiltersV2Response(**service.filters_v2(cloud=cloud, month=month, tenant_id=tenant.tenant_id if tenant else None))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/cloud/{cloud}/tenants", response_model=list[TenantOption])
+def get_cloud_tenants(cloud: str, db: Session = Depends(get_db)) -> list[TenantOption]:
+    if cloud not in {"aws", "azure", "oci"}:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cloud inválida")
+    tenants = TenantService(db).list_tenants(cloud)
+    return [
+        TenantOption(
+            tenantKey=tenant.tenant_key,
+            tenantName=tenant.tenant_name or tenant.tenant_key,
+            cloud=tenant.cloud,
+        )
+        for tenant in tenants
+    ]
 
 
 @router.post("/ai/insights", response_model=AiInsightResponse)
@@ -259,9 +306,13 @@ def post_ai_insights_v2(payload: AiInsightRequest) -> AiInsightResponse:
 def post_analytics_insights_v2(
     payload: AnalyticsInsightRequest,
     service: AnalyticsService = Depends(get_analytics_service),
+    db: Session = Depends(get_db),
 ) -> AnalyticsInsightResponse:
+    tenant = TenantService(db).resolve_tenant(payload.cloud, payload.tenant_key)
     filters = QueryFilters(
         cloud=payload.cloud,
+        tenant_id=tenant.tenant_id if tenant else None,
+        tenant_key=payload.tenant_key,
         start=payload.from_,
         end=payload.to,
         currency=payload.currency,
@@ -312,9 +363,12 @@ def post_cost_explorer_insights_v2(
     service: AnalyticsService = Depends(get_analytics_service),
     db: Session = Depends(get_db),
 ) -> CostExplorerInsightResponse:
-    AutoIngestService(db).ensure_range(payload.cloud, payload.from_, payload.to)
+    tenant = TenantService(db).resolve_tenant(payload.cloud, payload.tenant_key)
+    AutoIngestService(db).ensure_range(payload.cloud, payload.from_, payload.to, tenant_key=payload.tenant_key)
     filters = QueryFilters(
         cloud=payload.cloud,
+        tenant_id=tenant.tenant_id if tenant else None,
+        tenant_key=payload.tenant_key,
         start=payload.from_,
         end=payload.to,
         currency=payload.currency,
@@ -339,8 +393,15 @@ def post_reingest(payload: ReingestRequest, db: Session = Depends(get_db)) -> Re
 
     providers = ["aws", "azure", "oci"] if cloud == "all" else [cloud]
     results: list[ReingestResult] = []
-    for provider in providers:
-        result = run_ingest_job(db, provider=provider, start=payload.from_, end=payload.to)
-        results.append(ReingestResult(**result))
+    try:
+        for provider in providers:
+            tenant_keys = _tenant_keys_for_request(db, provider, payload.tenant_key if provider == cloud else None)
+            for current_tenant_key in tenant_keys:
+                result = run_ingest_job(db, provider=provider, start=payload.from_, end=payload.to, tenant_key=current_tenant_key)
+                results.append(ReingestResult(**result))
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     CurrencyRateSyncService(db).ensure_brl_usd_rate(payload.to)
     return ReingestResponse(results=results)

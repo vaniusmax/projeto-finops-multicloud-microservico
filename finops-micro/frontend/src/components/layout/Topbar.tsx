@@ -1,7 +1,7 @@
 "use client";
 
 import { Bell, Cloud, RefreshCcw, Save, SlidersHorizontal } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAppContext } from "@/contexts/AppContext";
+import { useTenantOptionsQuery } from "@/hooks/use-finops-queries";
 import { useToast } from "@/hooks/use-toast";
 import { postReingest } from "@/lib/api/finops";
 
@@ -40,12 +41,16 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
   } = useAppContext();
   const [viewName, setViewName] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const tenantOptionsQuery = useTenantOptionsQuery(filters.cloud, filters.cloud !== "all");
+  const tenantOptions = useMemo(() => tenantOptionsQuery.data ?? [], [tenantOptionsQuery.data]);
+  const showTenantSelector = filters.cloud !== "all" && tenantOptions.length > 0;
 
   async function handleRefresh() {
     setIsRefreshing(true);
     try {
       const result = await postReingest({
         cloud: filters.cloud,
+        tenant: filters.tenant,
         from: filters.from,
         to: filters.to,
       });
@@ -127,13 +132,13 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
           </div>
         </div>
 
-        <div className="grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-soft xl:grid-cols-[1.1fr_1.4fr_0.8fr_1fr_auto_auto]">
+        <div className={`grid gap-3 rounded-2xl border border-slate-200 bg-white p-3 shadow-soft ${showTenantSelector ? "xl:grid-cols-[1fr_1fr_1.4fr_0.8fr_1fr_auto_auto]" : "xl:grid-cols-[1.1fr_1.4fr_0.8fr_1fr_auto_auto]"}`}>
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <label className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-slate-500">
               <Cloud className="h-3.5 w-3.5" />
               Cloud
             </label>
-            <Select value={filters.cloud} onValueChange={(value) => updateFilters({ cloud: value })}>
+            <Select value={filters.cloud} onValueChange={(value) => updateFilters({ cloud: value, tenant: "" })}>
               <SelectTrigger className="border-none bg-transparent px-0 shadow-none">
                 <SelectValue />
               </SelectTrigger>
@@ -146,6 +151,24 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
               </SelectContent>
             </Select>
           </div>
+
+          {showTenantSelector ? (
+            <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+              <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Tenant</label>
+              <Select value={filters.tenant} onValueChange={(value) => updateFilters({ tenant: value })}>
+                <SelectTrigger className="border-none bg-transparent px-0 shadow-none">
+                  <SelectValue placeholder="Selecionar tenant" />
+                </SelectTrigger>
+                <SelectContent>
+                  {tenantOptions.map((option) => (
+                    <SelectItem key={option.tenantKey} value={option.tenantKey}>
+                      {option.tenantName}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
 
           <div className="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
             <label className="mb-2 block text-xs font-semibold uppercase tracking-wide text-slate-500">Período</label>

@@ -13,6 +13,7 @@ export function getDefaultFilters() {
   from.setDate(today.getDate() - 6);
   return {
     cloud: "aws",
+    tenant: "",
     from: toIso(from),
     to: toIso(today),
     currency: "BRL" as const,

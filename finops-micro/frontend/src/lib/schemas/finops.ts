@@ -32,6 +32,12 @@ export const filtersSchema = z.object({
   accounts: z.array(z.string()),
 });
 
+export const tenantSchema = z.object({
+  tenantKey: z.string(),
+  tenantName: z.string(),
+  cloud: z.string(),
+});
+
 export const aiInsightSchema = z.object({
   answerMarkdown: z.string(),
   highlights: z.array(z.string()),
@@ -140,6 +146,7 @@ export const costExplorerInsightSchema = z.object({
 });
 
 export const dailySchema = z.array(dailyItemSchema);
+export const tenantsSchema = z.array(tenantSchema);
 export const topServicesSchema = z.array(
   topItemSchema.transform((item) => ({
     ...item,
@@ -158,6 +165,7 @@ export type DailyResponse = z.infer<typeof dailySchema>;
 export type TopServicesResponse = z.infer<typeof topServicesSchema>;
 export type TopAccountsResponse = z.infer<typeof topAccountsSchema>;
 export type FiltersResponse = z.infer<typeof filtersSchema>;
+export type TenantsResponse = z.infer<typeof tenantsSchema>;
 export type AiInsightResponse = z.infer<typeof aiInsightSchema>;
 export type AnalyticsInsightResponse = z.infer<typeof analyticsInsightSchema>;
 export type CostExplorerSnapshotResponse = z.infer<typeof costExplorerSnapshotSchema>;
