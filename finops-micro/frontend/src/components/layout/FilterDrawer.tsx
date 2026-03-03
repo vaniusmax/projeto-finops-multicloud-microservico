@@ -56,7 +56,7 @@ function ToggleGroup({
 export function FilterDrawer() {
   const { filters, updateFilters, isFilterDrawerOpen, setFilterDrawerOpen } = useAppContext();
   const month = filters.from.slice(0, 7);
-  const filterOptions = useFilterOptionsQuery(filters.cloud, month, isFilterDrawerOpen);
+  const filterOptions = useFilterOptionsQuery(filters.cloud, month, filters.tenant, isFilterDrawerOpen);
   const services = filterOptions.data?.services ?? [];
   const accounts = filterOptions.data?.accounts ?? [];
 

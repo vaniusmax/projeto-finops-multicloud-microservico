@@ -1,4 +1,12 @@
-import type { AiInsightResponse, DailyResponse, FiltersResponse, SummaryResponse, TopAccountsResponse, TopServicesResponse } from "@/lib/schemas/finops";
+import type {
+  AiInsightResponse,
+  DailyResponse,
+  FiltersResponse,
+  SummaryResponse,
+  TenantsResponse,
+  TopAccountsResponse,
+  TopServicesResponse,
+} from "@/lib/schemas/finops";
 
 export const mockSummary: SummaryResponse = {
   totalWeek: 19290,
@@ -180,3 +188,8 @@ export const mockAiInsight: AiInsightResponse = {
     "Avaliar reserva/savings plans para workloads estáveis.",
   ],
 };
+
+export const mockTenants: TenantsResponse = [
+  { tenantKey: "OCI-TENANT-OCVS", tenantName: "OCI-TENANT-OCVS", cloud: "oci" },
+  { tenantKey: "OCI-TENANT-ORACLE-SOA", tenantName: "OCI-TENANT-ORACLE-SOA", cloud: "oci" },
+];

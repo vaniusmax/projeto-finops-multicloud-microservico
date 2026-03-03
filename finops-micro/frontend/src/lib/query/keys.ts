@@ -12,5 +12,6 @@ export const finopsKeys = {
     ["finops", "cost-explorer", "trend", filters, groupBy, selectedItem] as const,
   costExplorerInsights: (filters: DashboardFilters, groupBy: string, selectedItem: string | null) =>
     ["finops", "cost-explorer", "insights", filters, groupBy, selectedItem] as const,
-  filters: (cloud: string, month: string) => ["finops", "filters", cloud, month] as const,
+  filters: (cloud: string, month: string, tenant: string) => ["finops", "filters", cloud, tenant, month] as const,
+  tenants: (cloud: string) => ["finops", "tenants", cloud] as const,
 };

@@ -2,6 +2,7 @@ import { getDefaultFilters } from "@/lib/constants";
 
 export type DashboardFilters = {
   cloud: string;
+  tenant: string;
   from: string;
   to: string;
   currency: "BRL" | "USD";
@@ -16,6 +17,7 @@ export function parseFilters(searchParams: URLSearchParams): DashboardFilters {
   const defaults = getDefaultFilters();
   return {
     cloud: searchParams.get("cloud") ?? defaults.cloud,
+    tenant: searchParams.get("tenant") ?? defaults.tenant,
     from: searchParams.get("from") ?? defaults.from,
     to: searchParams.get("to") ?? defaults.to,
     currency: searchParams.get("currency") === "USD" ? "USD" : "BRL",
@@ -28,6 +30,9 @@ export function parseFilters(searchParams: URLSearchParams): DashboardFilters {
 export function toSearchParams(filters: DashboardFilters): URLSearchParams {
   const params = new URLSearchParams();
   params.set("cloud", filters.cloud);
+  if (filters.tenant) {
+    params.set("tenant", filters.tenant);
+  }
   params.set("from", filters.from);
   params.set("to", filters.to);
   params.set("currency", filters.currency);
@@ -49,7 +54,7 @@ export function mergeSearchParams(
   const params = new URLSearchParams(current.toString());
   const filterParams = toSearchParams(filters);
 
-  ["cloud", "from", "to", "currency", "topN", "services", "accounts"].forEach((key) => {
+  ["cloud", "tenant", "from", "to", "currency", "topN", "services", "accounts"].forEach((key) => {
     params.delete(key);
   });
 

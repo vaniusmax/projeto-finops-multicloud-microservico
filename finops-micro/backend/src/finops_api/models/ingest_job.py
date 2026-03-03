@@ -3,9 +3,9 @@ from __future__ import annotations
 import uuid
 from datetime import date, datetime
 
-from sqlalchemy import Date, DateTime, String, Text, text
+from sqlalchemy import Date, DateTime, ForeignKey, String, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from finops_api.db.base import Base
 
@@ -14,6 +14,7 @@ class IngestJob(Base):
     __tablename__ = "ingest_job"
 
     job_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("dim_tenant.tenant_id"), nullable=False, index=True)
     cloud: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
     status: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
@@ -24,3 +25,7 @@ class IngestJob(Base):
     dataset_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
     details_json: Mapped[dict] = mapped_column("stats", JSONB, nullable=False, server_default=text("'{}'::jsonb"))
     error_message: Mapped[str | None] = mapped_column("error", Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    tenant = relationship("DimTenant", back_populates="jobs")
+    audits = relationship("FactIngestAudit", back_populates="job")

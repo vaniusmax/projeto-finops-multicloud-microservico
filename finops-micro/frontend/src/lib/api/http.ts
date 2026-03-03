@@ -31,7 +31,7 @@ function buildUrl(path: string, query?: RequestConfig["query"]) {
     for (const [key, value] of Object.entries(query)) {
       if (Array.isArray(value)) {
         value.forEach((v) => url.searchParams.append(key, v));
-      } else if (value !== undefined) {
+      } else if (value !== undefined && value !== "") {
         url.searchParams.set(key, String(value));
       }
     }

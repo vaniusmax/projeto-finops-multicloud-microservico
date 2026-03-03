@@ -12,13 +12,20 @@ from finops_api.db.base import Base
 
 class FactCostDaily(Base):
     __tablename__ = "fact_cost_daily"
-    __table_args__ = (Index("ix_fact_cost_daily_usage_date_cloud", "cost_date", "cloud"),)
+    __table_args__ = (
+        Index("ix_fact_cost_daily_usage_date_cloud", "cost_date", "cloud"),
+        Index("ix_fact_cost_daily_tenant_cost_date", "tenant_id", "cost_date"),
+        Index("ix_fact_cost_daily_tenant_cloud_cost_date", "tenant_id", "cloud", "cost_date"),
+        Index("ix_fact_cost_daily_tenant_scope_cost_date", "tenant_id", "scope_id", "cost_date"),
+        Index("ix_fact_cost_daily_tenant_service_cost_date", "tenant_id", "service_id", "cost_date"),
+    )
 
     fact_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     usage_date: Mapped[date] = mapped_column("cost_date", Date, nullable=False, index=True)
     cloud: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
 
-    scope_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("dim_scope.scope_id"), nullable=True)
+    tenant_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("dim_tenant.tenant_id"), nullable=False, index=True)
+    scope_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), ForeignKey("dim_scope.scope_id"), nullable=False)
     service_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("dim_service.service_id"), nullable=True)
     region_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("dim_region.region_id"), nullable=True)
     job_id: Mapped[uuid.UUID | None] = mapped_column(UUID(as_uuid=True), ForeignKey("ingest_job.job_id"), nullable=True)
@@ -46,6 +53,7 @@ class FactCostDaily(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
+    tenant = relationship("DimTenant", back_populates="costs")
     scope = relationship("DimScope", back_populates="costs")
     service = relationship("DimService", back_populates="costs")
     region = relationship("DimRegion", back_populates="costs")

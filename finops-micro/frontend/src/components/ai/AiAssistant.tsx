@@ -43,6 +43,7 @@ export function AiAssistant({ filters }: AiAssistantProps) {
     setMessages((prev) => [...prev, { role: "user", text: question }]);
     mutation.mutate({
       cloud: filters.cloud,
+      tenant: filters.tenant,
       from: filters.from,
       to: filters.to,
       currency: filters.currency,

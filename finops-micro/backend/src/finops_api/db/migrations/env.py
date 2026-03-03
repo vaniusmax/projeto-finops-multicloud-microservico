@@ -14,7 +14,16 @@ if str(SRC_ROOT) not in sys.path:
 
 from finops_api.core.config import settings
 from finops_api.db.base import Base
-from finops_api.models import dim_currency_rate, dim_region, dim_scope, dim_service, fact_cost_daily, ingest_job  # noqa: F401
+from finops_api.models import (  # noqa: F401
+    dim_currency_rate,
+    dim_region,
+    dim_scope,
+    dim_service,
+    dim_tenant,
+    fact_cost_daily,
+    fact_ingest_audit,
+    ingest_job,
+)
 
 config = context.config
 config.set_main_option("sqlalchemy.url", settings.database_url)

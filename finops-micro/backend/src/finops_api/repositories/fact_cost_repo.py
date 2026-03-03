@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import case, func, literal, select
 from sqlalchemy.orm import Session
@@ -22,6 +23,8 @@ class QueryFilters:
     start: date
     end: date
     currency: str = "BRL"
+    tenant_id: UUID | None = None
+    tenant_key: str | None = None
     scope_key: str | None = None
     service_key: str | None = None
     services: list[str] | None = None
@@ -109,22 +112,38 @@ class FactCostRepository:
             return stmt
         return stmt
 
-    def has_source_data_in_range(self, cloud: str, start: date, end: date, source_ref: str) -> bool:
+    def has_source_data_in_range(
+        self,
+        cloud: str,
+        start: date,
+        end: date,
+        source_ref: str,
+        tenant_id: UUID | None = None,
+    ) -> bool:
         stmt = (
             select(func.count(FactCostDaily.fact_id))
             .where(FactCostDaily.usage_date.between(start, end))
             .where(FactCostDaily.cloud == cloud)
             .where(FactCostDaily.source_ref == source_ref)
         )
+        stmt = self._apply_tenant_filter(stmt, tenant_id)
         total = self.db.execute(stmt).scalar_one()
         return int(total or 0) > 0
 
-    def has_source_data_covering_range(self, cloud: str, start: date, end: date, source_ref: str) -> bool:
+    def has_source_data_covering_range(
+        self,
+        cloud: str,
+        start: date,
+        end: date,
+        source_ref: str,
+        tenant_id: UUID | None = None,
+    ) -> bool:
         stmt = (
             select(func.min(FactCostDaily.usage_date), func.max(FactCostDaily.usage_date))
             .where(FactCostDaily.cloud == cloud)
             .where(FactCostDaily.source_ref == source_ref)
         )
+        stmt = self._apply_tenant_filter(stmt, tenant_id)
         row = self.db.execute(stmt).one()
         min_date, max_date = row[0], row[1]
         if min_date is None or max_date is None:
@@ -170,6 +189,12 @@ class FactCostRepository:
         )
 
     @staticmethod
+    def _apply_tenant_filter(stmt, tenant_id: UUID | None):
+        if tenant_id is None:
+            return stmt
+        return stmt.where(FactCostDaily.tenant_id == tenant_id)
+
+    @staticmethod
     def _previous_period(filters: QueryFilters) -> QueryFilters:
         range_days = (filters.end - filters.start).days + 1
         prev_end = filters.start - timedelta(days=1)
@@ -179,6 +204,8 @@ class FactCostRepository:
             start=prev_start,
             end=prev_end,
             currency=filters.currency,
+            tenant_id=filters.tenant_id,
+            tenant_key=filters.tenant_key,
             scope_key=filters.scope_key,
             service_key=filters.service_key,
             services=filters.services,
@@ -187,6 +214,7 @@ class FactCostRepository:
 
     def _base_stmt(self, filters: QueryFilters, join_service: bool = False, join_scope: bool = False):
         stmt = select(FactCostDaily).where(FactCostDaily.usage_date.between(filters.start, filters.end))
+        stmt = self._apply_tenant_filter(stmt, filters.tenant_id)
         if filters.cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == filters.cloud)
         if join_service or filters.service_key or filters.services:
@@ -203,22 +231,25 @@ class FactCostRepository:
             stmt = stmt.where(DimScope.scope_name.in_(filters.accounts))
         return stmt
 
-    def available_range(self, cloud: str) -> tuple[date | None, date | None]:
+    def available_range(self, cloud: str, tenant_id: UUID | None = None) -> tuple[date | None, date | None]:
         stmt = select(func.min(FactCostDaily.usage_date), func.max(FactCostDaily.usage_date))
+        stmt = self._apply_tenant_filter(stmt, tenant_id)
         if cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == cloud)
         row = self.db.execute(stmt).one()
         return row[0], row[1]
 
-    def has_data_in_range(self, cloud: str, start: date, end: date) -> bool:
+    def has_data_in_range(self, cloud: str, start: date, end: date, tenant_id: UUID | None = None) -> bool:
         stmt = select(func.count(FactCostDaily.fact_id)).where(FactCostDaily.usage_date.between(start, end))
+        stmt = self._apply_tenant_filter(stmt, tenant_id)
         if cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == cloud)
         total = self.db.execute(stmt).scalar_one()
         return int(total or 0) > 0
 
-    def has_data_covering_range(self, cloud: str, start: date, end: date) -> bool:
+    def has_data_covering_range(self, cloud: str, start: date, end: date, tenant_id: UUID | None = None) -> bool:
         stmt = select(func.min(FactCostDaily.usage_date), func.max(FactCostDaily.usage_date))
+        stmt = self._apply_tenant_filter(stmt, tenant_id)
         if cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == cloud)
         row = self.db.execute(stmt).one()
@@ -234,6 +265,7 @@ class FactCostRepository:
             .select_from(FactCostDaily)
             .where(FactCostDaily.usage_date.between(filters.start, filters.end))
         )
+        stmt = self._apply_tenant_filter(stmt, filters.tenant_id)
         if filters.cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == filters.cloud)
         stmt = self._apply_aws_source_scope(stmt, filters.cloud, "service")
@@ -263,6 +295,7 @@ class FactCostRepository:
             .where(FactCostDaily.amount_brl.is_not(None))
             .where(FactCostDaily.currency_code == "USD")
         )
+        stmt = self._apply_tenant_filter(stmt, filters.tenant_id)
         if filters.cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == filters.cloud)
         stmt = self._apply_aws_source_scope(stmt, filters.cloud, "service")
@@ -542,7 +575,7 @@ class FactCostRepository:
             )
         return result
 
-    def filter_lists(self, cloud: str, month: str | None = None) -> dict[str, list[str]]:
+    def filter_lists(self, cloud: str, month: str | None = None, tenant_id: UUID | None = None) -> dict[str, list[str]]:
         service_name = self._service_name_expr()
         account_name = self._account_name_expr()
 
@@ -567,6 +600,8 @@ class FactCostRepository:
             accounts_stmt = accounts_stmt.where(FactCostDaily.cloud == cloud)
             services_stmt = self._apply_aws_source_scope(services_stmt, cloud, "service")
             accounts_stmt = self._apply_aws_source_scope(accounts_stmt, cloud, "account")
+        services_stmt = self._apply_tenant_filter(services_stmt, tenant_id)
+        accounts_stmt = self._apply_tenant_filter(accounts_stmt, tenant_id)
         if month:
             year, month_number = month.split("-")
             start = date(int(year), int(month_number), 1)
@@ -700,6 +735,7 @@ class FactCostRepository:
         service_joined: bool = False,
     ):
         stmt = stmt.where(FactCostDaily.usage_date.between(filters.start, filters.end))
+        stmt = self._apply_tenant_filter(stmt, filters.tenant_id)
         if filters.cloud != "all":
             stmt = stmt.where(FactCostDaily.cloud == filters.cloud)
         if (join_scope or filters.scope_key or filters.accounts) and not scope_joined:
