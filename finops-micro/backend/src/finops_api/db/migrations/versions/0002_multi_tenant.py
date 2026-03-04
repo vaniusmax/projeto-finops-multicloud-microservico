@@ -35,6 +35,15 @@ def _has_index(inspector, table_name: str, index_name: str) -> bool:
     return any(index["name"] == index_name for index in inspector.get_indexes(table_name))
 
 
+def _has_unique_constraint(inspector, table_name: str, constraint_name: str) -> bool:
+    if not _has_table(inspector, table_name):
+        return False
+    return any(
+        constraint["name"] == constraint_name
+        for constraint in inspector.get_unique_constraints(table_name)
+    )
+
+
 def upgrade() -> None:
     bind = op.get_bind()
     inspector = inspect(bind)
@@ -118,7 +127,7 @@ def upgrade() -> None:
     op.execute(
         """
         INSERT INTO dim_tenant (cloud, tenant_key, tenant_name, metadata)
-        SELECT DISTINCT cloud, 'default', initcap(cloud) || ' Default', jsonb_build_object('backfill', true, 'source', 'default')
+        SELECT DISTINCT cloud, 'default', initcap(cloud::text) || ' Default', jsonb_build_object('backfill', true, 'source', 'default')
         FROM (
             SELECT cloud FROM dim_scope
             UNION
@@ -254,7 +263,8 @@ def upgrade() -> None:
     op.alter_column("ingest_job", "tenant_id", nullable=False)
     op.alter_column("fact_ingest_audit", "tenant_id", nullable=False)
 
-    op.drop_constraint("uq_dim_scope_cloud", "dim_scope", type_="unique")
+    if _has_unique_constraint(inspector, "dim_scope", "uq_dim_scope_cloud"):
+        op.drop_constraint("uq_dim_scope_cloud", "dim_scope", type_="unique")
     op.create_unique_constraint(op.f("uq_dim_scope_tenant_id"), "dim_scope", ["tenant_id", "scope_key"])
 
     if not _has_index(inspector, "fact_cost_daily", "ix_fact_cost_daily_tenant_cost_date"):

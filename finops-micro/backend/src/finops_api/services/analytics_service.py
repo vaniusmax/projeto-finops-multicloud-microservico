@@ -81,15 +81,16 @@ class AnalyticsService:
             currency=filters.currency,
         )
 
+        current_rate_date = date.today()
         usd_rate = None
         if self.currency_repo is not None:
-            usd_rate = self.currency_repo.get_brl_per_usd(filters.end)
+            usd_rate = self.currency_repo.get_brl_per_usd(current_rate_date)
         if usd_rate is None:
             usd_rate = self.fact_repo.infer_brl_per_usd(
                 QueryFilters(
                     cloud=filters.cloud,
                     start=year_start,
-                    end=reference_date,
+                    end=current_rate_date,
                     currency=filters.currency,
                     tenant_id=filters.tenant_id,
                     tenant_key=filters.tenant_key,
