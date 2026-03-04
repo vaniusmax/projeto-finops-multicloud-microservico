@@ -191,9 +191,10 @@ def ensure_ingest_v2_summary(
             tenant_keys = _tenant_keys_for_request(db, provider, filters.tenant_key if provider == filters.cloud else None)
             for current_tenant_key in tenant_keys:
                 run_ingest_job(db, provider=provider, start=year_start, end=reference_date, tenant_key=current_tenant_key)
-        CurrencyRateSyncService(db).ensure_brl_usd_rate(reference_date)
+        CurrencyRateSyncService(db).ensure_brl_usd_rate(date.today())
     else:
         AutoIngestService(db).ensure_range(filters.cloud, year_start, reference_date, tenant_key=filters.tenant_key)
+        CurrencyRateSyncService(db).ensure_brl_usd_rate(date.today())
     # O summary usa acumulados mensal/anual, mas o dashboard nao deve falhar
     # apenas porque o provider ainda nao fechou o dia corrente.
     _assert_data_available(db, filters.cloud, filters.start, filters.end, tenant_id=filters.tenant_id)

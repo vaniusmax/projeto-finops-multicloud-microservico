@@ -1,1 +1,1 @@
-__all__ = ["finops"]
+__all__ = ["auth", "finops"]

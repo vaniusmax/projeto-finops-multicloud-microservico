@@ -48,6 +48,21 @@ class Settings(BaseSettings):
     oci_cli_path: str = Field(default="oci", alias="OCI_CLI_PATH")
     tenant_configs_json: str = Field(default="{}", alias="TENANT_CONFIGS_JSON")
 
+    auth_allowed_email_domains: str = Field(
+        default="algar.com.br,algartelecom.com.br",
+        alias="AUTH_ALLOWED_EMAIL_DOMAINS",
+    )
+    auth_frontend_base_url: str = Field(default="http://localhost:3000", alias="AUTH_FRONTEND_BASE_URL")
+    auth_verify_email_path: str = Field(default="/verify-email", alias="AUTH_VERIFY_EMAIL_PATH")
+    auth_session_ttl_hours: int = Field(default=12, alias="AUTH_SESSION_TTL_HOURS")
+    auth_verification_ttl_hours: int = Field(default=24, alias="AUTH_VERIFICATION_TTL_HOURS")
+    auth_email_from: str = Field(default="finops@algar.com.br", alias="AUTH_EMAIL_FROM")
+    smtp_host: str | None = Field(default=None, alias="SMTP_HOST")
+    smtp_port: int = Field(default=587, alias="SMTP_PORT")
+    smtp_username: str | None = Field(default=None, alias="SMTP_USERNAME")
+    smtp_password: str | None = Field(default=None, alias="SMTP_PASSWORD")
+    smtp_use_tls: bool = Field(default=True, alias="SMTP_USE_TLS")
+
     target_monthly_brl: float = Field(default=331894.50, alias="TARGET_MONTHLY_BRL")
     target_weekly_brl: float = Field(default=82973.625, alias="TARGET_WEEKLY_BRL")
     target_monthly_usd: float = Field(default=57000.0, alias="TARGET_MONTHLY_USD")
