@@ -92,6 +92,7 @@ class IngestService:
             cli_path=settings.oci_cli_path,
             profile=(runtime_config.profile if runtime_config else settings.oci_profile),
             region=settings.oci_region,
+            compartment_depth=settings.oci_compartment_depth,
         )
         return OciCliClient(provider_settings).fetch_daily_costs(start, end)
 

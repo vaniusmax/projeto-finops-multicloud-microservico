@@ -36,6 +36,7 @@ projeto-finops-multicloud/
 **/.env
 **/.env.*
 !.env.example
+!**/.env.prod.example
 
 # Logs / temp
 **/*.log

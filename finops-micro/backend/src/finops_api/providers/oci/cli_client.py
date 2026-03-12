@@ -19,6 +19,9 @@ class OciCliSettings:
     region: str = "sa-saopaulo-1"
     granularity: str = "DAILY"
     query_type: str = "COST"
+    # O Usage API exige compartmentDepth quando groupBy inclui compartment.
+    # 6 aproxima o comportamento "All" no console da OCI.
+    compartment_depth: int = 6
 
 
 class OciCliClient:
@@ -50,7 +53,7 @@ class OciCliClient:
             "--group-by",
             json.dumps(["compartmentName", "service", "skuName"]),
             "--compartment-depth",
-            "1",
+            str(self.settings.compartment_depth),
             "--output",
             "json",
         ]

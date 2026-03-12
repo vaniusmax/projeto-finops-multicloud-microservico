@@ -1,4 +1,5 @@
 import { mockRoute } from "@/lib/mocks/mock-api";
+import { clearStoredAccessToken, getStoredAccessToken } from "@/lib/auth/storage";
 
 export class ApiError extends Error {
   constructor(
@@ -43,12 +44,16 @@ export async function request<T>({ method = "GET", path, query, body }: RequestC
   const url = buildUrl(path, query);
 
   if (useMocks) {
-    return mockRoute<T>(`${url.pathname}${url.search}`);
+    return mockRoute<T>({ method, path: `${url.pathname}${url.search}`, body });
   }
 
   const headers: Record<string, string> = {};
+  const accessToken = getStoredAccessToken();
   if (body !== undefined) {
     headers["Content-Type"] = "application/json";
+  }
+  if (accessToken) {
+    headers.Authorization = `Bearer ${accessToken}`;
   }
 
   const response = await fetch(url.toString(), {
@@ -59,7 +64,19 @@ export async function request<T>({ method = "GET", path, query, body }: RequestC
   });
 
   if (!response.ok) {
-    throw new ApiError(`Falha na requisição: ${response.status}`, response.status);
+    let detail = `Falha na requisição: ${response.status}`;
+    try {
+      const payload = (await response.json()) as { detail?: string };
+      if (payload.detail) {
+        detail = payload.detail;
+      }
+    } catch {
+      // Mantém a mensagem padrão quando a resposta não vier em JSON.
+    }
+    if (response.status === 401) {
+      clearStoredAccessToken();
+    }
+    throw new ApiError(detail, response.status);
   }
 
   return (await response.json()) as T;

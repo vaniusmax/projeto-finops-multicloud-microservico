@@ -1,5 +1,6 @@
 "use client";
 
+import { AuthGate } from "@/components/auth/AuthGate";
 import { AppShell } from "@/components/layout/AppShell";
 
 type WorkspacePageProps = {
@@ -10,8 +11,10 @@ type WorkspacePageProps = {
 
 export function WorkspacePage({ children, showAdvancedFilters = true, healthLabel }: WorkspacePageProps) {
   return (
-    <AppShell showAdvancedFilters={showAdvancedFilters} healthLabel={healthLabel}>
-      {children}
-    </AppShell>
+    <AuthGate>
+      <AppShell showAdvancedFilters={showAdvancedFilters} healthLabel={healthLabel}>
+        {children}
+      </AppShell>
+    </AuthGate>
   );
 }

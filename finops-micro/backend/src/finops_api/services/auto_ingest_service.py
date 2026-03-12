@@ -86,8 +86,10 @@ class AutoIngestService:
     @staticmethod
     def _effective_end(requested_end: date) -> date:
         today = date.today()
-        if requested_end >= today:
-            return today.fromordinal(today.toordinal() - 1)
+        # Permite tentativa de ingestao do dia corrente (quando houver dados parciais),
+        # mas evita consultar datas futuras.
+        if requested_end > today:
+            return today
         return requested_end
 
     @staticmethod

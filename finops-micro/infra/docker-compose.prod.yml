@@ -1,0 +1,91 @@
+services:
+  finops-db:
+    image: postgres:16
+    container_name: finops-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB}
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      TZ: ${TZ}
+    volumes:
+      - finops_db_data:/var/lib/postgresql/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  finops-api:
+    build:
+      context: ../backend
+      dockerfile: Dockerfile.prod
+    container_name: finops-api
+    restart: unless-stopped
+    env_file:
+      - .env.prod
+    depends_on:
+      finops-db:
+        condition: service_healthy
+    expose:
+      - "8000"
+    networks:
+      - internal
+      - proxy
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')\""]
+      interval: 20s
+      timeout: 5s
+      retries: 5
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.finops-api.rule=Host(`${FINOPS_API_HOST}`)
+      - traefik.http.routers.finops-api.entrypoints=${TRAEFIK_ENTRYPOINTS}
+      # Para TLS com certresolver ativo no Traefik, descomente:
+      # - traefik.http.routers.finops-api.tls=true
+      # - traefik.http.routers.finops-api.tls.certresolver=letsencrypt
+      - traefik.http.services.finops-api.loadbalancer.server.port=8000
+
+  finops-web:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile.prod
+      args:
+        NEXT_PUBLIC_API_GATEWAY_URL: ${NEXT_PUBLIC_API_GATEWAY_URL}
+        NEXT_PUBLIC_API_BASE_PATH: ${NEXT_PUBLIC_API_BASE_PATH}
+        NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS}
+    container_name: finops-web
+    restart: unless-stopped
+    environment:
+      NEXT_PUBLIC_API_GATEWAY_URL: ${NEXT_PUBLIC_API_GATEWAY_URL}
+      NEXT_PUBLIC_API_BASE_PATH: ${NEXT_PUBLIC_API_BASE_PATH}
+      NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS}
+    depends_on:
+      finops-api:
+        condition: service_healthy
+    expose:
+      - "3000"
+    networks:
+      - proxy
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.finops-web.rule=Host(`${FINOPS_WEB_HOST}`)
+      - traefik.http.routers.finops-web.entrypoints=${TRAEFIK_ENTRYPOINTS}
+      # Para TLS com certresolver ativo no Traefik, descomente:
+      # - traefik.http.routers.finops-web.tls=true
+      # - traefik.http.routers.finops-web.tls.certresolver=letsencrypt
+      - traefik.http.services.finops-web.loadbalancer.server.port=3000
+
+volumes:
+  finops_db_data:
+
+networks:
+  proxy:
+    external: true
+    name: proxy
+  internal:
+    driver: bridge
