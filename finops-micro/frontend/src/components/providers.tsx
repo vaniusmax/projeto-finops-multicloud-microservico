@@ -4,6 +4,7 @@ import { QueryCache, QueryClient, QueryClientProvider } from "@tanstack/react-qu
 import { useState } from "react";
 
 import { ToastProvider } from "@/components/ui/toaster";
+import { AuthProvider } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import { ApiError } from "@/lib/api/http";
 
@@ -40,7 +41,9 @@ function QueryProvider({ children }: { children: React.ReactNode }) {
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <ToastProvider>
-      <QueryProvider>{children}</QueryProvider>
+      <AuthProvider>
+        <QueryProvider>{children}</QueryProvider>
+      </AuthProvider>
     </ToastProvider>
   );
 }

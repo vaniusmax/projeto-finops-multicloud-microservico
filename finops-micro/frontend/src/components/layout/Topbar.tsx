@@ -2,6 +2,7 @@
 
 import { Bell, Cloud, RefreshCcw, Save, SlidersHorizontal } from "lucide-react";
 import { useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 
 import { DateRangePicker } from "@/components/filters/DateRangePicker";
@@ -9,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { useAppContext } from "@/contexts/AppContext";
+import { useAuth } from "@/contexts/AuthContext";
 import { useTenantOptionsQuery } from "@/hooks/use-finops-queries";
 import { useToast } from "@/hooks/use-toast";
 import { postReingest } from "@/lib/api/finops";
@@ -26,8 +28,10 @@ const CLOUD_OPTIONS = [
 ] as const;
 
 export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: TopbarProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const { pushToast } = useToast();
+  const { user, logout } = useAuth();
   const {
     filters,
     updateFilters,
@@ -41,6 +45,7 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
   } = useAppContext();
   const [viewName, setViewName] = useState("");
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
   const tenantOptionsQuery = useTenantOptionsQuery(filters.cloud, filters.cloud !== "all");
   const tenantOptions = useMemo(() => tenantOptionsQuery.data ?? [], [tenantOptionsQuery.data]);
   const showTenantSelector = filters.cloud !== "all" && tenantOptions.length > 0;
@@ -73,6 +78,16 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
     }
   }
 
+  async function handleLogout() {
+    setIsLoggingOut(true);
+    try {
+      await logout();
+      router.replace("/overview");
+    } finally {
+      setIsLoggingOut(false);
+    }
+  }
+
   return (
     <header className="sticky top-0 z-30 border-b border-slate-200/80 bg-[#F4F6F7]/95 backdrop-blur">
       <div className="flex flex-col gap-4 px-4 py-4 lg:px-8">
@@ -89,6 +104,18 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
+            {user ? (
+              <div className="flex items-center gap-3 rounded-2xl border border-emerald-100 bg-emerald-50 px-4 py-2 text-sm shadow-sm">
+                <div>
+                  <p className="font-semibold text-emerald-900">{user.firstName} {user.lastName}</p>
+                  <p className="text-xs text-emerald-700">{user.email}</p>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => void handleLogout()} disabled={isLoggingOut}>
+                  {isLoggingOut ? "Saindo..." : "Sair"}
+                </Button>
+              </div>
+            ) : null}
+
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm shadow-sm">
               <Bell className="h-4 w-4 text-emerald-700" />
               <span className="text-slate-600">Health indicator</span>

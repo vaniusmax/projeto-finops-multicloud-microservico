@@ -99,6 +99,99 @@ Serviços:
 - Frontend: `http://localhost:3000/dashboard`
 - Postgres: `localhost:5432`
 
+## Deploy produção com Traefik (stack já existente)
+
+Pré-requisito: rede Docker `proxy` já criada pela stack do Traefik.
+
+Arquivos de produção:
+- `backend/Dockerfile.prod`
+- `frontend/Dockerfile.prod`
+- `infra/docker-compose.prod.yml`
+- `infra/.env.prod.example`
+
+### Passo a passo PRD (com CLIs de cloud)
+
+1. Preparar variáveis de produção.
+
+```bash
+cd finops-micro/infra
+cp .env.prod.example .env.prod
+```
+
+2. Editar `.env.prod` com dados reais:
+- `POSTGRES_PASSWORD`
+- `FINOPS_WEB_HOST`
+- `FINOPS_API_HOST`
+- `CORS_ORIGINS`
+- `AUTH_FRONTEND_BASE_URL`
+- `OPENAI_API_KEY` (se usar IA)
+- variáveis de ingestão: `AWS_PROFILE`, `AZURE_MANAGEMENT_GROUP_ID`, `OCI_TENANT_ID`, etc.
+
+3. Garantir CLIs no ambiente que executa a ingestão.
+- AWS CLI: comando esperado `aws`
+- Azure CLI: comando esperado `az`
+- OCI CLI: comando esperado `oci`
+- O backend usa os comandos definidos em:
+  - `AWS_CLI_PATH` (default `aws`)
+  - `AZURE_CLI_PATH` (default `az`)
+  - `OCI_CLI_PATH` (default `oci`)
+
+4. Autenticar cada CLI com conta/permissões de leitura de custo.
+
+```bash
+# AWS
+aws configure --profile <seu-profile>
+aws ce get-cost-and-usage \
+  --profile <seu-profile> \
+  --time-period Start=2026-01-01,End=2026-01-02 \
+  --granularity DAILY \
+  --metrics UnblendedCost
+
+# Azure
+az login
+az account show
+
+# OCI
+oci setup config
+oci iam region list --profile DEFAULT
+```
+
+5. Subir stack de produção.
+
+```bash
+cd finops-micro/infra
+docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
+```
+
+6. Validar saúde dos serviços.
+
+```bash
+docker compose -f docker-compose.prod.yml --env-file .env.prod ps
+curl -fsS http://<FINOPS_API_HOST>/api/v1/health
+```
+
+7. Executar ingestão manual inicial (opcional, recomendado no primeiro deploy).
+
+```bash
+cd finops-micro/infra
+docker compose -f docker-compose.prod.yml --env-file .env.prod exec finops-api \
+  python -m finops_api.jobs.ingest_cli providers \
+  --provider all \
+  --start 2026-01-01 \
+  --end 2026-01-31
+```
+
+8. Testar endpoints e frontend via Traefik.
+- Frontend: `http://<FINOPS_WEB_HOST>`
+- Backend health: `http://<FINOPS_API_HOST>/api/v1/health`
+
+### Notas de operação
+
+- O compose de produção não publica portas de app; o acesso é via Traefik (`network: proxy`).
+- O backend executa `alembic upgrade head` antes de subir o `uvicorn`.
+- Para TLS, descomente labels `tls=true` e `tls.certresolver=...` no `docker-compose.prod.yml` e use `TRAEFIK_ENTRYPOINTS=websecure`.
+- Se seus binários tiverem caminhos diferentes, ajuste `AWS_CLI_PATH`, `AZURE_CLI_PATH` e `OCI_CLI_PATH` no `.env.prod`.
+
 ## Backend local
 
 ```bash

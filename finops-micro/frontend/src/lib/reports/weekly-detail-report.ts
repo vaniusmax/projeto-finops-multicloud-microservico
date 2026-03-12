@@ -18,6 +18,7 @@ const PDF_WIDTH = 842;
 const PDF_HEIGHT = 595;
 
 export function openWeeklyDetailReport(payload: WeeklyDetailReportPayload) {
+  const reportPeriod = getReportPeriodLabel(payload.from, payload.to);
   const canvas = renderWeeklyDetailCanvas(payload);
   const dataUrl = canvas.toDataURL("image/jpeg", 0.92);
   const jpegBytes = dataUrlToBytes(dataUrl);
@@ -25,7 +26,7 @@ export function openWeeklyDetailReport(payload: WeeklyDetailReportPayload) {
   const url = URL.createObjectURL(pdfBlob);
   const anchor = document.createElement("a");
   anchor.href = url;
-  anchor.download = `relatorio-semanal-${payload.cloud.toLowerCase()}-${payload.from}-${payload.to}.pdf`;
+  anchor.download = `relatorio-${reportPeriod.toLowerCase()}-${payload.cloud.toLowerCase()}-${payload.from}-${payload.to}.pdf`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -139,11 +140,12 @@ function drawSidebar(
 }
 
 function drawHeader(ctx: CanvasRenderingContext2D, payload: WeeklyDetailReportPayload, x: number, y: number, width: number) {
-  drawPill(ctx, x, y - 4, 208, 36, "#e7f6f1", "#0a8d6c", `${payload.cloud.toUpperCase()} | VISÃO SEMANAL`, 15);
+  const reportPeriod = getReportPeriodLabel(payload.from, payload.to);
+  drawPill(ctx, x, y - 4, 208, 36, "#e7f6f1", "#0a8d6c", `${payload.cloud.toUpperCase()} | VISÃO ${reportPeriod.toUpperCase()}`, 15);
 
   ctx.fillStyle = "#005c4b";
   ctx.font = "900 68px 'Segoe UI', Arial, sans-serif";
-  ctx.fillText("Relatorio Semanal", x, y + 92);
+  ctx.fillText(`Relatorio ${reportPeriod}`, x, y + 92);
 
   ctx.font = "800 44px 'Segoe UI', Arial, sans-serif";
   ctx.fillStyle = "#0b7a66";
@@ -158,7 +160,7 @@ function drawHeader(ctx: CanvasRenderingContext2D, payload: WeeklyDetailReportPa
 
   ctx.font = "700 20px 'Segoe UI', Arial, sans-serif";
   ctx.fillStyle = "#61717a";
-  ctx.fillText(`Origem: Visao detalhada semanal | Moeda ${payload.currency} | Janela ${payload.from} a ${payload.to}`, x, y + 202);
+  ctx.fillText(`Origem: Visao detalhada ${reportPeriod.toLowerCase()} | Moeda ${payload.currency} | Janela ${payload.from} a ${payload.to}`, x, y + 202);
 
   ctx.textAlign = "right";
   ctx.fillStyle = "#005c4b";
@@ -197,8 +199,9 @@ function drawKpis(ctx: CanvasRenderingContext2D, payload: WeeklyDetailReportPayl
 }
 
 function drawOverviewRows(ctx: CanvasRenderingContext2D, payload: WeeklyDetailReportPayload, x: number, y: number, width: number) {
+  const reportPeriod = getReportPeriodLabel(payload.from, payload.to);
   const rows = [
-    ["Consumo semanal", formatMoney(payload.summary.totalWeek, payload.currency)],
+    [`Consumo ${reportPeriod.toLowerCase()}`, formatMoney(payload.summary.totalWeek, payload.currency)],
     ["Media diaria", formatMoney(payload.summary.avgDaily, payload.currency)],
     ["Pico diario", `${formatDateLabel(payload.summary.peakDay.date)} | ${formatMoney(payload.summary.peakDay.amount, payload.currency)}`],
     ["Maior servico", payload.topServices[0] ? `${payload.topServices[0].serviceName} | ${formatPctValue(payload.topServices[0].sharePct)}` : "N/A"],
@@ -464,6 +467,19 @@ function splitLines(ctx: CanvasRenderingContext2D, text: string, maxWidth: numbe
 
 function formatDateRange(from: string, to: string) {
   return `${formatDateLabel(from)} a ${formatDateLabel(to)}`;
+}
+
+function getReportPeriodLabel(from: string, to: string): "Semanal" | "Mensal" {
+  return getPeriodDayCount(from, to) > 7 ? "Mensal" : "Semanal";
+}
+
+function getPeriodDayCount(from: string, to: string): number {
+  const fromDate = new Date(`${from}T00:00:00Z`);
+  const toDate = new Date(`${to}T00:00:00Z`);
+  if (Number.isNaN(fromDate.getTime()) || Number.isNaN(toDate.getTime())) {
+    return 0;
+  }
+  return Math.max(Math.round((toDate.getTime() - fromDate.getTime()) / 86_400_000) + 1, 0);
 }
 
 function normalizeAccountLabel(value: string) {
