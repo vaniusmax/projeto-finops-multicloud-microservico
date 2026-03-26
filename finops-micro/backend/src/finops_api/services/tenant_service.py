@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
-from typing import Any
+from datetime import datetime, timezone
+from threading import Lock
+from typing import Any, ClassVar
 
-from sqlalchemy import Select, select
+from sqlalchemy import select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -13,6 +15,8 @@ from finops_api.models.dim_tenant import DimTenant
 
 
 MULTI_TENANT_CLOUDS = {"aws", "azure", "oci"}
+
+_SYNC_COOLDOWN_SECONDS = 60
 
 
 @dataclass(frozen=True)
@@ -24,6 +28,9 @@ class TenantRuntimeConfig:
 
 
 class TenantService:
+    _sync_lock: ClassVar[Lock] = Lock()
+    _last_sync: ClassVar[datetime | None] = None
+
     def __init__(self, db: Session | None = None) -> None:
         self.db = db
         self._configs = self.load_tenants_by_cloud()
@@ -102,6 +109,15 @@ class TenantService:
     def sync_configured_tenants(self) -> None:
         if self.db is None:
             return
+
+        now = datetime.now(timezone.utc)
+        with self._sync_lock:
+            if self._last_sync is not None:
+                elapsed = (now - self._last_sync).total_seconds()
+                if elapsed < _SYNC_COOLDOWN_SECONDS:
+                    return
+            TenantService._last_sync = now
+
         for cloud in MULTI_TENANT_CLOUDS:
             for config in self.get_runtime_configs(cloud):
                 stmt = insert(DimTenant).values(

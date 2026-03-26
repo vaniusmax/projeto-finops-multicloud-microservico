@@ -15,7 +15,12 @@ export function useDashboardFilters() {
   function updateFilters(patch: Partial<DashboardFilters>) {
     const next: DashboardFilters = { ...filters, ...patch };
     const params = mergeSearchParams(new URLSearchParams(searchParams.toString()), next);
-    router.push(`${pathname}?${params.toString()}`);
+    const nextQuery = params.toString();
+    const currentQuery = searchParams.toString();
+    if (nextQuery === currentQuery) {
+      return;
+    }
+    router.push(`${pathname}?${nextQuery}`);
   }
 
   return { filters, updateFilters };

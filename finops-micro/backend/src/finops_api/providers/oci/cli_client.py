@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import subprocess
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal
 from typing import Any
 
+from finops_api.providers.common import run_cli_with_retry
 from finops_api.providers.common.types import CanonicalCostRow
 
 
@@ -19,16 +19,17 @@ class OciCliSettings:
     region: str = "sa-saopaulo-1"
     granularity: str = "DAILY"
     query_type: str = "COST"
-    # O Usage API exige compartmentDepth quando groupBy inclui compartment.
-    # 6 aproxima o comportamento "All" no console da OCI.
     compartment_depth: int = 6
+    timeout: int = 300
+    retry_attempts: int = 3
+    retry_delay: float = 5.0
 
 
 class OciCliClient:
-    def __init__(self, settings: OciCliSettings) -> None:
-        if not settings.tenant_id:
+    def __init__(self, provider_settings: OciCliSettings) -> None:
+        if not provider_settings.tenant_id:
             raise ValueError("tenant_id é obrigatório para ingestão OCI")
-        self.settings = settings
+        self.settings = provider_settings
 
     def fetch_daily_costs(self, start: date, end: date) -> list[CanonicalCostRow]:
         command = [
@@ -51,7 +52,7 @@ class OciCliClient:
             "--query-type",
             self.settings.query_type,
             "--group-by",
-            json.dumps(["compartmentName", "service", "skuName"]),
+            json.dumps(["compartmentName", "service", "skuName", "region"]),
             "--compartment-depth",
             str(self.settings.compartment_depth),
             "--output",
@@ -59,11 +60,15 @@ class OciCliClient:
         ]
         env = os.environ.copy()
         env.setdefault("SUPPRESS_LABEL_WARNING", "True")
-        result = subprocess.run(command, check=False, capture_output=True, text=True, env=env)
-        if result.returncode != 0:
-            error_text = result.stderr.strip() or result.stdout.strip() or "Falha OCI Usage API"
-            raise RuntimeError(f"Falha no OCI CLI: {error_text}")
-        return self._parse(json.loads(result.stdout))
+        stdout = run_cli_with_retry(
+            command,
+            timeout=self.settings.timeout,
+            max_attempts=self.settings.retry_attempts,
+            retry_delay=self.settings.retry_delay,
+            env=env,
+            label="OCI Usage",
+        )
+        return self._parse(json.loads(stdout))
 
     def _parse(self, payload: dict[str, Any]) -> list[CanonicalCostRow]:
         rows: list[CanonicalCostRow] = []
@@ -75,6 +80,7 @@ class OciCliClient:
             service = str(item.get("service") or "Outros")
             compartment = str(item.get("compartment-name") or "Sem compartment")
             sku_name = str(item.get("sku-name") or "Outros")
+            item_region = str(item.get("region") or self.settings.region)
             currency = str(
                 item.get("currency")
                 or item.get("currency-code")
@@ -91,8 +97,8 @@ class OciCliClient:
                     scope_name=compartment,
                     service_key=service,
                     service_name=service,
-                    region_key=self.settings.region,
-                    region_name=self.settings.region,
+                    region_key=item_region,
+                    region_name=item_region,
                     currency_code=currency,
                     amount=amount,
                     amount_brl=amount if currency.upper() == "BRL" else None,

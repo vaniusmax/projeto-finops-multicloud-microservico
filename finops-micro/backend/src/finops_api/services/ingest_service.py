@@ -6,8 +6,9 @@ from dataclasses import asdict, dataclass
 from datetime import date, datetime, timezone
 from decimal import Decimal
 from typing import Any
+from uuid import UUID
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
@@ -36,13 +37,21 @@ class IngestResult:
     rows_written: int
     rows_inserted: int = 0
     rows_updated: int = 0
+    rows_deleted: int = 0
 
 
 class IngestService:
     def __init__(self, db: Session) -> None:
         self.db = db
 
-    def ingest_provider(self, provider: str, start: date, end: date, tenant_key: str | None = None) -> IngestResult:
+    def ingest_provider(
+        self,
+        provider: str,
+        start: date,
+        end: date,
+        tenant_key: str | None = None,
+        job_id: UUID | None = None,
+    ) -> IngestResult:
         provider = provider.lower().strip()
         tenant_service = TenantService(self.db)
         tenant = tenant_service.resolve_tenant(provider, tenant_key)
@@ -59,20 +68,24 @@ class IngestService:
         if tenant is None:
             raise ValueError(f"tenant não resolvido para {provider}")
 
-        written, rows_inserted, rows_updated = self._persist(rows, tenant)
+        written, rows_inserted, rows_deleted = self._persist(rows, tenant, job_id=job_id)
         return IngestResult(
             provider=provider,
             tenant_key=tenant.tenant_key,
             rows_received=len(rows),
             rows_written=written,
             rows_inserted=rows_inserted,
-            rows_updated=rows_updated,
+            rows_updated=0,
+            rows_deleted=rows_deleted,
         )
 
     def _fetch_aws(self, start: date, end: date, runtime_config: TenantRuntimeConfig | None) -> list[CanonicalCostRow]:
         provider_settings = AwsCliSettings(
             cli_path=settings.aws_cli_path,
             profile=(runtime_config.profile if runtime_config else settings.aws_profile) or None,
+            timeout=settings.cli_subprocess_timeout,
+            retry_attempts=settings.cli_retry_attempts,
+            retry_delay=settings.cli_retry_delay,
         )
         return AwsCliClient(provider_settings).fetch_daily_costs(start, end)
 
@@ -82,6 +95,9 @@ class IngestService:
             management_group_id=azure_mg,
             api_version=settings.azure_api_version,
             cli_path=settings.azure_cli_path,
+            timeout=settings.cli_subprocess_timeout,
+            retry_attempts=settings.cli_retry_attempts,
+            retry_delay=settings.cli_retry_delay,
         )
         return AzureCliClient(provider_settings).fetch_daily_costs(start, end)
 
@@ -93,79 +109,196 @@ class IngestService:
             profile=(runtime_config.profile if runtime_config else settings.oci_profile),
             region=settings.oci_region,
             compartment_depth=settings.oci_compartment_depth,
+            timeout=settings.cli_subprocess_timeout,
+            retry_attempts=settings.cli_retry_attempts,
+            retry_delay=settings.cli_retry_delay,
         )
         return OciCliClient(provider_settings).fetch_daily_costs(start, end)
 
-    def _persist(self, rows: Iterable[CanonicalCostRow], tenant: DimTenant) -> tuple[int, int, int]:
-        written = 0
-        rows_inserted = 0
-        rows_updated = 0
-        scope_cache: dict[tuple[str, str, str], str] = {}
-        service_cache: dict[tuple[str, str], str] = {}
-        region_cache: dict[tuple[str, str], str] = {}
+    # ------------------------------------------------------------------
+    # Persist pipeline: DELETE existing range + bulk INSERT
+    # ------------------------------------------------------------------
 
+    def _persist(
+        self,
+        rows: Iterable[CanonicalCostRow],
+        tenant: DimTenant,
+        job_id: UUID | None = None,
+    ) -> tuple[int, int, int]:
         normalized_rows = self._coalesce_rows(rows)
-        for row in normalized_rows:
-            self._cleanup_legacy_currency_mismatch(row, tenant)
-            scope_id = self._get_or_create_scope(row, tenant, scope_cache)
-            service_id = self._get_or_create_service(row, service_cache)
-            region_id = self._get_or_create_region(row, region_cache)
+        if not normalized_rows:
+            return 0, 0, 0
 
-            values = dict(
-                usage_date=row.usage_date,
-                cloud=row.cloud,
-                tenant_id=tenant.tenant_id,
-                scope_id=scope_id,
-                service_id=service_id,
-                region_id=region_id,
-                scope_key=row.scope_key,
-                service_key=row.service_key,
-                region_key=row.region_key,
-                currency_code=row.currency_code.upper(),
-                amount=self._to_decimal(row.amount),
-                amount_brl=self._to_decimal(row.amount_brl) if row.amount_brl is not None else None,
-                source_ref=row.source_ref,
-                source_record_id=None,
-                tags={},
-                metadata_json=row.metadata_json,
+        scope_cache = self._bulk_ensure_scopes(normalized_rows, tenant)
+        service_cache = self._bulk_ensure_services(normalized_rows)
+        region_cache = self._bulk_ensure_regions(normalized_rows)
+
+        min_date = min(r.usage_date for r in normalized_rows)
+        max_date = max(r.usage_date for r in normalized_rows)
+        source_refs = {r.source_ref for r in normalized_rows}
+        clouds = {r.cloud for r in normalized_rows}
+
+        rows_deleted = self._delete_existing_range(tenant, clouds, min_date, max_date, source_refs)
+
+        all_values: list[dict[str, Any]] = []
+        for row in normalized_rows:
+            all_values.append(
+                dict(
+                    usage_date=row.usage_date,
+                    cloud=row.cloud,
+                    tenant_id=tenant.tenant_id,
+                    scope_id=scope_cache.get((row.cloud, row.scope_key)),
+                    service_id=service_cache.get((row.cloud, row.service_key)),
+                    region_id=region_cache.get((row.cloud, row.region_key)),
+                    job_id=job_id,
+                    scope_key=row.scope_key,
+                    service_key=row.service_key,
+                    region_key=row.region_key,
+                    currency_code=row.currency_code.upper(),
+                    amount=self._to_decimal(row.amount),
+                    amount_brl=self._to_decimal(row.amount_brl) if row.amount_brl is not None else None,
+                    source_ref=row.source_ref,
+                    source_record_id=None,
+                    tags={},
+                    metadata_json=row.metadata_json,
+                )
             )
 
-            # O schema alvo usa índice único com expressões (COALESCE), não constraint nomeada.
-            # Então usamos insert DO NOTHING e, em caso de conflito, fazemos UPDATE manual pela chave natural.
-            insert_stmt = insert(FactCostDaily).values(**values).on_conflict_do_nothing()
-            result = self.db.execute(insert_stmt)
-            if int(result.rowcount or 0) == 0:
-                update_stmt = (
-                    update(FactCostDaily)
-                    .where(FactCostDaily.usage_date == row.usage_date)
-                    .where(FactCostDaily.cloud == row.cloud)
-                    .where(FactCostDaily.tenant_id == tenant.tenant_id)
-                    .where(FactCostDaily.scope_key == row.scope_key)
-                    .where(FactCostDaily.service_key == row.service_key)
-                    .where(func.coalesce(FactCostDaily.region_key, "") == (row.region_key or ""))
-                    .where(func.coalesce(FactCostDaily.resource_id, "") == "")
-                    .where(FactCostDaily.currency_code == row.currency_code.upper())
-                    .where(func.coalesce(FactCostDaily.charge_type, "") == "")
-                    .where(func.coalesce(FactCostDaily.pricing_model, "") == "")
-                    .values(
-                        tenant_id=tenant.tenant_id,
-                        scope_id=scope_id,
-                        service_id=service_id,
-                        region_id=region_id,
-                        amount=self._to_decimal(row.amount),
-                        amount_brl=self._to_decimal(row.amount_brl) if row.amount_brl is not None else None,
-                        metadata_json=row.metadata_json,
-                        updated_at=datetime.now(timezone.utc),
-                    )
-                )
-                self.db.execute(update_stmt)
-                rows_updated += 1
-            else:
-                rows_inserted += 1
-            written += 1
+        rows_inserted = 0
+        batch_size = settings.ingest_batch_size
+        for i in range(0, len(all_values), batch_size):
+            batch = all_values[i : i + batch_size]
+            stmt = insert(FactCostDaily).values(batch).on_conflict_do_nothing()
+            result = self.db.execute(stmt)
+            rows_inserted += result.rowcount or 0
 
         self.db.commit()
-        return written, rows_inserted, rows_updated
+        return len(normalized_rows), rows_inserted, rows_deleted
+
+    def _delete_existing_range(
+        self,
+        tenant: DimTenant,
+        clouds: set[str],
+        min_date: date,
+        max_date: date,
+        source_refs: set[str],
+    ) -> int:
+        stmt = (
+            delete(FactCostDaily)
+            .where(FactCostDaily.tenant_id == tenant.tenant_id)
+            .where(FactCostDaily.cloud.in_(clouds))
+            .where(FactCostDaily.usage_date.between(min_date, max_date))
+            .where(FactCostDaily.source_ref.in_(source_refs))
+        )
+        return self.db.execute(stmt).rowcount or 0
+
+    # ------------------------------------------------------------------
+    # Bulk dimension resolution
+    # ------------------------------------------------------------------
+
+    def _bulk_ensure_scopes(
+        self,
+        rows: list[CanonicalCostRow],
+        tenant: DimTenant,
+    ) -> dict[tuple[str, str], str]:
+        unique: dict[tuple[str, str], str] = {}
+        for row in rows:
+            unique.setdefault((row.cloud, row.scope_key), row.scope_name)
+
+        if unique:
+            values = [
+                dict(
+                    tenant_id=tenant.tenant_id,
+                    cloud=cloud,
+                    scope_key=scope_key,
+                    scope_name=scope_name,
+                    metadata_json={"origin": "cli_ingest"},
+                )
+                for (cloud, scope_key), scope_name in unique.items()
+            ]
+            insert_stmt = insert(DimScope).values(values)
+            upsert_stmt = insert_stmt.on_conflict_do_update(
+                index_elements=[DimScope.tenant_id, DimScope.scope_key],
+                set_={
+                    DimScope.scope_name: insert_stmt.excluded.scope_name,
+                    DimScope.metadata_json: {"origin": "cli_ingest"},
+                },
+            )
+            self.db.execute(upsert_stmt)
+
+        existing = self.db.execute(
+            select(DimScope.cloud, DimScope.scope_key, DimScope.scope_id)
+            .where(DimScope.tenant_id == tenant.tenant_id)
+        ).all()
+        return {(str(r.cloud), str(r.scope_key)): str(r.scope_id) for r in existing}
+
+    def _bulk_ensure_services(self, rows: list[CanonicalCostRow]) -> dict[tuple[str, str], str]:
+        unique: dict[tuple[str, str], str] = {}
+        for row in rows:
+            unique.setdefault((row.cloud, row.service_key), row.service_name)
+
+        if unique:
+            values = [
+                dict(
+                    cloud=cloud,
+                    service_key=service_key,
+                    service_name=service_name,
+                    metadata_json={"origin": "cli_ingest"},
+                )
+                for (cloud, service_key), service_name in unique.items()
+            ]
+            insert_stmt = insert(DimService).values(values)
+            upsert_stmt = insert_stmt.on_conflict_do_update(
+                index_elements=[DimService.cloud, DimService.service_key],
+                set_={
+                    DimService.service_name: insert_stmt.excluded.service_name,
+                    DimService.metadata_json: {"origin": "cli_ingest"},
+                },
+            )
+            self.db.execute(upsert_stmt)
+
+        clouds = {r.cloud for r in rows}
+        existing = self.db.execute(
+            select(DimService.cloud, DimService.service_key, DimService.service_id)
+            .where(DimService.cloud.in_(clouds))
+        ).all()
+        return {(str(r.cloud), str(r.service_key)): str(r.service_id) for r in existing}
+
+    def _bulk_ensure_regions(self, rows: list[CanonicalCostRow]) -> dict[tuple[str, str], str]:
+        unique: dict[tuple[str, str], str] = {}
+        for row in rows:
+            unique.setdefault((row.cloud, row.region_key), row.region_name)
+
+        if unique:
+            values = [
+                dict(
+                    cloud=cloud,
+                    region_key=region_key,
+                    region_name=region_name,
+                    metadata_json={"origin": "cli_ingest"},
+                )
+                for (cloud, region_key), region_name in unique.items()
+            ]
+            insert_stmt = insert(DimRegion).values(values)
+            upsert_stmt = insert_stmt.on_conflict_do_update(
+                index_elements=[DimRegion.cloud, DimRegion.region_key],
+                set_={
+                    DimRegion.region_name: insert_stmt.excluded.region_name,
+                    DimRegion.metadata_json: {"origin": "cli_ingest"},
+                },
+            )
+            self.db.execute(upsert_stmt)
+
+        clouds = {r.cloud for r in rows}
+        existing = self.db.execute(
+            select(DimRegion.cloud, DimRegion.region_key, DimRegion.region_id)
+            .where(DimRegion.cloud.in_(clouds))
+        ).all()
+        return {(str(r.cloud), str(r.region_key)): str(r.region_id) for r in existing}
+
+    # ------------------------------------------------------------------
+    # Row coalescing
+    # ------------------------------------------------------------------
 
     def _coalesce_rows(self, rows: Iterable[CanonicalCostRow]) -> list[CanonicalCostRow]:
         aggregated: dict[tuple[str, date, str, str, str, str, str], CanonicalCostRow] = {}
@@ -203,133 +336,9 @@ class IngestService:
 
         return list(aggregated.values())
 
-    def _cleanup_legacy_currency_mismatch(self, row: CanonicalCostRow, tenant: DimTenant) -> None:
-        # Corrige legado: alguns registros Azure/OCI foram persistidos como USD
-        # mesmo com valor já em BRL, inflando KPIs por conversão duplicada.
-        if row.cloud not in {"azure", "oci"}:
-            return
-        if str(row.currency_code or "").upper() != "BRL":
-            return
-
-        stmt = (
-            delete(FactCostDaily)
-            .where(FactCostDaily.usage_date == row.usage_date)
-            .where(FactCostDaily.cloud == row.cloud)
-            .where(FactCostDaily.tenant_id == tenant.tenant_id)
-            .where(FactCostDaily.scope_key == row.scope_key)
-            .where(FactCostDaily.service_key == row.service_key)
-            .where(func.coalesce(FactCostDaily.region_key, "") == (row.region_key or ""))
-            .where(func.coalesce(FactCostDaily.resource_id, "") == "")
-            .where(func.coalesce(FactCostDaily.charge_type, "") == "")
-            .where(func.coalesce(FactCostDaily.pricing_model, "") == "")
-            .where(FactCostDaily.source_ref == row.source_ref)
-            .where(FactCostDaily.currency_code == "USD")
-        )
-        self.db.execute(stmt)
-
-    def _get_or_create_scope(self, row: CanonicalCostRow, tenant: DimTenant, cache: dict[tuple[str, str, str], str]) -> str:
-        key = (row.cloud, str(tenant.tenant_id), row.scope_key)
-        cached = cache.get(key)
-        if cached:
-            return cached
-
-        existing = self.db.execute(
-            select(DimScope.scope_id).where(
-                DimScope.cloud == row.cloud,
-                DimScope.tenant_id == tenant.tenant_id,
-                DimScope.scope_key == row.scope_key,
-            )
-        ).scalar_one_or_none()
-        if existing:
-            self.db.execute(
-                update(DimScope)
-                .where(DimScope.scope_id == existing)
-                .values(scope_name=row.scope_name, metadata_json={"origin": "cli_ingest"})
-            )
-            cache[key] = str(existing)
-            return str(existing)
-
-        stmt = insert(DimScope).values(
-            tenant_id=tenant.tenant_id,
-            cloud=row.cloud,
-            scope_key=row.scope_key,
-            scope_name=row.scope_name,
-            metadata_json={"origin": "cli_ingest"},
-        ).on_conflict_do_update(
-            index_elements=[DimScope.tenant_id, DimScope.scope_key],
-            set_={
-                DimScope.scope_name: row.scope_name,
-                DimScope.metadata_json: {"origin": "cli_ingest"},
-            },
-        )
-        self.db.execute(stmt)
-        scope_id = self.db.execute(
-            select(DimScope.scope_id).where(
-                DimScope.cloud == row.cloud,
-                DimScope.tenant_id == tenant.tenant_id,
-                DimScope.scope_key == row.scope_key,
-            )
-        ).scalar_one()
-        cache[key] = str(scope_id)
-        return str(scope_id)
-
-    def _get_or_create_service(self, row: CanonicalCostRow, cache: dict[tuple[str, str], str]) -> str:
-        key = (row.cloud, row.service_key)
-        cached = cache.get(key)
-        if cached:
-            return cached
-
-        existing = self.db.execute(
-            select(DimService.service_id).where(
-                DimService.cloud == row.cloud,
-                DimService.service_key == row.service_key,
-            )
-        ).scalar_one_or_none()
-        if existing:
-            cache[key] = str(existing)
-            return str(existing)
-
-        stmt = insert(DimService).values(
-            cloud=row.cloud,
-            service_key=row.service_key,
-            service_name=row.service_name,
-            metadata_json={"origin": "cli_ingest"},
-        ).on_conflict_do_nothing(index_elements=[DimService.cloud, DimService.service_key])
-        self.db.execute(stmt)
-        service_id = self.db.execute(
-            select(DimService.service_id).where(
-                DimService.cloud == row.cloud,
-                DimService.service_key == row.service_key,
-            )
-        ).scalar_one()
-        cache[key] = str(service_id)
-        return str(service_id)
-
-    def _get_or_create_region(self, row: CanonicalCostRow, cache: dict[tuple[str, str], str]) -> str:
-        key = (row.cloud, row.region_key)
-        cached = cache.get(key)
-        if cached:
-            return cached
-
-        existing = self.db.execute(
-            select(DimRegion.region_id).where(DimRegion.cloud == row.cloud, DimRegion.region_key == row.region_key)
-        ).scalar_one_or_none()
-        if existing:
-            cache[key] = str(existing)
-            return str(existing)
-
-        stmt = insert(DimRegion).values(
-            cloud=row.cloud,
-            region_key=row.region_key,
-            region_name=row.region_name,
-            metadata_json={"origin": "cli_ingest"},
-        ).on_conflict_do_nothing(index_elements=[DimRegion.cloud, DimRegion.region_key])
-        self.db.execute(stmt)
-        region_id = self.db.execute(
-            select(DimRegion.region_id).where(DimRegion.cloud == row.cloud, DimRegion.region_key == row.region_key)
-        ).scalar_one()
-        cache[key] = str(region_id)
-        return str(region_id)
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
 
     @staticmethod
     def _to_decimal(value: Decimal | None) -> Decimal:
@@ -404,7 +413,13 @@ def run_ingest_job(db: Session, provider: str, start: date, end: date, tenant_ke
 
     service = IngestService(db)
     try:
-        result = service.ingest_provider(provider_name, start, end, tenant_key=tenant.tenant_key)
+        result = service.ingest_provider(
+            provider_name,
+            start,
+            end,
+            tenant_key=tenant.tenant_key,
+            job_id=ingest_job.job_id,
+        )
         ingest_job.status = "success"
         ingest_job.finished_at = datetime.now(timezone.utc)
         ingest_job.details_json = {
@@ -418,13 +433,12 @@ def run_ingest_job(db: Session, provider: str, start: date, end: date, tenant_ke
                 cloud=provider_name,
                 rows_inserted=result.rows_inserted,
                 rows_updated=result.rows_updated,
-                rows_deleted=0,
+                rows_deleted=result.rows_deleted,
             )
         )
         db.commit()
         return asdict(result)
     except Exception as exc:  # noqa: BLE001
-        # Limpa transacao quebrada (flush/execute anterior) antes de persistir status de erro.
         db.rollback()
         try:
             failed_job = db.get(IngestJob, ingest_job.job_id)

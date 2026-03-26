@@ -1,12 +1,12 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any
 
+from finops_api.providers.common import run_cli_with_retry
 from finops_api.providers.common.types import CanonicalCostRow
 
 
@@ -15,18 +15,21 @@ class AzureCliSettings:
     management_group_id: str
     api_version: str = "2023-11-01"
     cli_path: str = "az"
+    timeout: int = 300
+    retry_attempts: int = 3
+    retry_delay: float = 5.0
 
 
 class AzureCliClient:
-    def __init__(self, settings: AzureCliSettings) -> None:
-        if not settings.management_group_id:
+    def __init__(self, provider_settings: AzureCliSettings) -> None:
+        if not provider_settings.management_group_id:
             raise ValueError("management_group_id é obrigatório para ingestão Azure")
-        self.settings = settings
+        self.settings = provider_settings
         self.endpoint = (
             "https://management.azure.com/providers/Microsoft.Management"
-            f"/managementGroups/{settings.management_group_id}"
+            f"/managementGroups/{provider_settings.management_group_id}"
             "/providers/Microsoft.CostManagement/query"
-            f"?api-version={settings.api_version}"
+            f"?api-version={provider_settings.api_version}"
         )
 
     def fetch_daily_costs(self, start: date, end: date) -> list[CanonicalCostRow]:
@@ -66,11 +69,14 @@ class AzureCliClient:
             "-o",
             "json",
         ]
-        result = subprocess.run(command, check=False, capture_output=True, text=True)
-        if result.returncode != 0:
-            error_text = result.stderr.strip() or result.stdout.strip() or "Falha Azure Cost Query"
-            raise RuntimeError(f"Falha no Azure CLI: {error_text}")
-        return json.loads(result.stdout)
+        stdout = run_cli_with_retry(
+            command,
+            timeout=self.settings.timeout,
+            max_attempts=self.settings.retry_attempts,
+            retry_delay=self.settings.retry_delay,
+            label="Azure Cost",
+        )
+        return json.loads(stdout)
 
     def _parse(self, payload: dict[str, Any]) -> list[CanonicalCostRow]:
         props = payload.get("properties", {})

@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import json
-import subprocess
 from dataclasses import dataclass
 from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
 from finops_api.core.config import settings
+from finops_api.providers.common import run_cli_with_retry
 from finops_api.providers.common.types import CanonicalCostRow
 
 
@@ -17,12 +17,15 @@ class AwsCliSettings:
     profile: str | None = None
     metric: str = "UnblendedCost"
     account_names: dict[str, str] | None = None
+    timeout: int = 300
+    retry_attempts: int = 3
+    retry_delay: float = 5.0
 
 
 class AwsCliClient:
-    def __init__(self, settings: AwsCliSettings) -> None:
-        self.settings = settings
-        self.account_names = settings.account_names or self._load_account_names()
+    def __init__(self, provider_settings: AwsCliSettings) -> None:
+        self.settings = provider_settings
+        self.account_names = provider_settings.account_names or self._load_account_names()
 
     def fetch_daily_costs(self, start: date, end: date) -> list[CanonicalCostRow]:
         service_rows = self._fetch_grouped_rows(start, end, group_by_keys=["SERVICE"])
@@ -75,11 +78,14 @@ class AwsCliClient:
         if next_token:
             command.extend(["--next-page-token", next_token])
 
-        completed = subprocess.run(command, check=False, capture_output=True, text=True)
-        if completed.returncode != 0:
-            error_text = completed.stderr.strip() or completed.stdout.strip() or "Falha AWS CE"
-            raise RuntimeError(f"Falha no AWS CLI: {error_text}")
-        return json.loads(completed.stdout)
+        stdout = run_cli_with_retry(
+            command,
+            timeout=self.settings.timeout,
+            max_attempts=self.settings.retry_attempts,
+            retry_delay=self.settings.retry_delay,
+            label="AWS CE",
+        )
+        return json.loads(stdout)
 
     def _parse_service_results(self, results: list[dict[str, Any]], group_definitions: list[dict[str, Any]]) -> list[CanonicalCostRow]:
         positions = {definition.get("Key"): idx for idx, definition in enumerate(group_definitions) if definition.get("Key")}

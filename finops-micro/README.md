@@ -127,6 +127,8 @@ cp .env.prod.example .env.prod
 - `OPENAI_API_KEY` (se usar IA)
 - variáveis de ingestão: `AWS_PROFILE`, `AZURE_MANAGEMENT_GROUP_ID`, `OCI_TENANT_ID`, etc.
 
+Para padrão de host único, configure `FINOPS_API_HOST` com o mesmo valor de `FINOPS_WEB_HOST`.
+
 3. Garantir CLIs no ambiente que executa a ingestão.
 - AWS CLI: comando esperado `aws`
 - Azure CLI: comando esperado `az`
@@ -167,7 +169,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod up -d --build
 
 ```bash
 docker compose -f docker-compose.prod.yml --env-file .env.prod ps
-curl -fsS http://<FINOPS_API_HOST>/api/v1/health
+curl -fsS http://<FINOPS_WEB_HOST>/api/v1/health
 ```
 
 7. Executar ingestão manual inicial (opcional, recomendado no primeiro deploy).
@@ -183,7 +185,7 @@ docker compose -f docker-compose.prod.yml --env-file .env.prod exec finops-api \
 
 8. Testar endpoints e frontend via Traefik.
 - Frontend: `http://<FINOPS_WEB_HOST>`
-- Backend health: `http://<FINOPS_API_HOST>/api/v1/health`
+- Backend health: `http://<FINOPS_WEB_HOST>/api/v1/health`
 
 ### Notas de operação
 

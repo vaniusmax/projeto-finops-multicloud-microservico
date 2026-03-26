@@ -38,6 +38,9 @@ class CurrencyQuote:
     source: str
 
 
+_CACHE_MAX_SIZE = 120
+
+
 class CurrencyRateSyncService:
     _request_cache: dict[date, float] = {}
     _cache_lock = Lock()
@@ -92,6 +95,7 @@ class CurrencyRateSyncService:
             self.repo.upsert_rate(quote.rate_date, "USD", "BRL", quote.brl_per_usd)
             self.repo.upsert_rate(quote.rate_date, "BRL", "USD", 1.0 / quote.brl_per_usd)
             self.db.commit()
+            self._evict_cache_if_full()
             self._request_cache[as_of] = quote.brl_per_usd
             self._request_cache[quote.rate_date] = quote.brl_per_usd
             logger.info(
@@ -101,6 +105,15 @@ class CurrencyRateSyncService:
                 quote.brl_per_usd,
             )
             return quote.brl_per_usd
+
+    @classmethod
+    def _evict_cache_if_full(cls) -> None:
+        if len(cls._request_cache) <= _CACHE_MAX_SIZE:
+            return
+        sorted_dates = sorted(cls._request_cache.keys())
+        to_remove = sorted_dates[: len(sorted_dates) - _CACHE_MAX_SIZE // 2]
+        for key in to_remove:
+            cls._request_cache.pop(key, None)
 
     def _fetch_quote(self, as_of: date) -> CurrencyQuote | None:
         fetchers = self._quote_fetchers(as_of)

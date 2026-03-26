@@ -258,6 +258,20 @@ class FactCostRepository:
             return False
         return min_date <= start and max_date >= end
 
+    def latest_usage_date(
+        self,
+        cloud: str,
+        tenant_id: UUID | None = None,
+        source_ref: str | None = None,
+    ) -> date | None:
+        stmt = select(func.max(FactCostDaily.usage_date)).select_from(FactCostDaily)
+        stmt = self._apply_tenant_filter(stmt, tenant_id)
+        if cloud != "all":
+            stmt = stmt.where(FactCostDaily.cloud == cloud)
+        if source_ref:
+            stmt = stmt.where(FactCostDaily.source_ref == source_ref)
+        return self.db.execute(stmt).scalar_one()
+
     def total(self, filters: QueryFilters) -> float:
         amount_expr = self._amount_expr(filters.currency, filters.end)
         stmt = (

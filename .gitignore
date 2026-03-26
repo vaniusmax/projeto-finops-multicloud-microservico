@@ -28,15 +28,19 @@ projeto-finops-multicloud/
 # Node / frontend
 **/node_modules/
 **/.next/
+**/.next-dev/
 **/out/
 **/.npm/
 **/.pnpm-store/
+**/*.tsbuildinfo
 
 # Env files
 **/.env
 **/.env.*
 !.env.example
 !**/.env.prod.example
+!**/.env.backend.example
+!**/.env.frontend.example
 
 # Logs / temp
 **/*.log
@@ -49,6 +53,4 @@ projeto-finops-multicloud/
 **/.docker/
 **/tmp/
 **/.cache/
-*.zip
-*.zip
 *.zip

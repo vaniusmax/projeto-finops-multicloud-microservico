@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import logging
 from datetime import date
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
 from finops_api.api.v1.deps import get_analytics_service
+from finops_api.core.config import settings
 from finops_api.db.session import get_db
 from finops_api.repositories.fact_cost_repo import FactCostRepository, QueryFilters
 from finops_api.schemas.finops import (
@@ -25,7 +27,6 @@ from finops_api.schemas.finops import (
     ReingestResponse,
     ReingestResult,
     SummaryV2Response,
-    TenantOption,
 )
 from finops_api.services.analytics_service import AnalyticsService
 from finops_api.services.analytics_insight_service import AnalyticsInsightService
@@ -37,6 +38,7 @@ from finops_api.services.ingest_service import run_ingest_job
 from finops_api.services.tenant_service import TenantService
 
 router = APIRouter(prefix="/finops", tags=["finops-v2"])
+logger = logging.getLogger(__name__)
 
 
 def _tenant_keys_for_request(db: Session, cloud: str, requested_tenant_key: str | None) -> list[str | None]:
@@ -46,45 +48,6 @@ def _tenant_keys_for_request(db: Session, cloud: str, requested_tenant_key: str 
     if runtime_configs:
         return [config.tenant_key for config in runtime_configs]
     return [None]
-
-
-def _assert_data_coverage(db: Session, cloud: str, start: date, end: date, tenant_id=None) -> None:
-    repo = FactCostRepository(db)
-    providers = ["aws", "azure", "oci"] if cloud == "all" else [cloud]
-    missing: list[str] = []
-
-    for provider in providers:
-        if provider == "aws":
-            has_service_data = repo.has_source_data_covering_range(
-                cloud="aws",
-                start=start,
-                end=end,
-                source_ref="aws_ce_service_cli",
-                tenant_id=tenant_id,
-            )
-            has_account_data = repo.has_source_data_covering_range(
-                cloud="aws",
-                start=start,
-                end=end,
-                source_ref="aws_ce_account_cli",
-                tenant_id=tenant_id,
-            )
-            if not (has_service_data and has_account_data):
-                missing.append("aws")
-            continue
-        if not repo.has_data_covering_range(provider, start, end, tenant_id=tenant_id):
-            missing.append(provider)
-
-    if missing:
-        missing_list = ", ".join(sorted(set(missing)))
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Dados incompletos para o período solicitado. "
-                f"Providers sem cobertura completa: {missing_list}. "
-                "Execute reingest/refresh antes de consolidar o mês."
-            ),
-        )
 
 
 def _assert_data_available(db: Session, cloud: str, start: date, end: date, tenant_id=None) -> None:
@@ -137,6 +100,11 @@ def parse_finops_filters(
 ) -> QueryFilters:
     if from_date > to_date:
         raise ValueError("from deve ser menor ou igual a to")
+    range_days = (to_date - from_date).days
+    if range_days > settings.ingest_max_range_days:
+        raise ValueError(
+            f"Intervalo de {range_days} dias excede o maximo permitido de {settings.ingest_max_range_days} dias"
+        )
     tenant = TenantService(db=None)  # type: ignore[arg-type]
     tenant.require_tenant_key(cloud, tenant_key)
     return QueryFilters(
@@ -148,13 +116,6 @@ def parse_finops_filters(
         services=services or None,
         accounts=accounts or None,
     )
-
-
-def ensure_ingest_v2(filters: QueryFilters = Depends(parse_finops_filters), db: Session = Depends(get_db)) -> QueryFilters:
-    tenant = TenantService(db).resolve_tenant(filters.cloud, filters.tenant_key)
-    filters.tenant_id = tenant.tenant_id if tenant else None
-    AutoIngestService(db).ensure_range(filters.cloud, filters.start, filters.end, tenant_key=filters.tenant_key)
-    return filters
 
 
 def ensure_ingest_v2_refreshable(
@@ -195,9 +156,23 @@ def ensure_ingest_v2_summary(
     else:
         AutoIngestService(db).ensure_range(filters.cloud, year_start, reference_date, tenant_key=filters.tenant_key)
         CurrencyRateSyncService(db).ensure_brl_usd_rate(date.today())
-    # O summary usa acumulados mensal/anual, mas o dashboard nao deve falhar
-    # apenas porque o provider ainda nao fechou o dia corrente.
-    _assert_data_available(db, filters.cloud, filters.start, filters.end, tenant_id=filters.tenant_id)
+    # O summary usa acumulados mensal/anual e deve ser resiliente a cobertura parcial.
+    # Quando faltarem dados no intervalo, seguimos com os dados disponiveis em vez de
+    # interromper o dashboard com 409.
+    try:
+        _assert_data_available(db, filters.cloud, filters.start, filters.end, tenant_id=filters.tenant_id)
+    except HTTPException as exc:
+        if exc.status_code == status.HTTP_409_CONFLICT:
+            logger.warning(
+                "Summary com cobertura parcial para cloud=%s tenant_id=%s intervalo=%s..%s: %s",
+                filters.cloud,
+                filters.tenant_id,
+                filters.start,
+                filters.end,
+                exc.detail,
+            )
+        else:
+            raise
     return filters
 
 
@@ -265,21 +240,6 @@ def get_filters_v2(
         return FiltersV2Response(**service.filters_v2(cloud=cloud, month=month, tenant_id=tenant.tenant_id if tenant else None))
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
-
-
-@router.get("/cloud/{cloud}/tenants", response_model=list[TenantOption])
-def get_cloud_tenants(cloud: str, db: Session = Depends(get_db)) -> list[TenantOption]:
-    if cloud not in {"aws", "azure", "oci"}:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cloud inválida")
-    tenants = TenantService(db).list_tenants(cloud)
-    return [
-        TenantOption(
-            tenantKey=tenant.tenant_key,
-            tenantName=tenant.tenant_name or tenant.tenant_key,
-            cloud=tenant.cloud,
-        )
-        for tenant in tenants
-    ]
 
 
 @router.post("/ai/insights", response_model=AiInsightResponse)
@@ -388,6 +348,12 @@ def post_cost_explorer_insights_v2(
 def post_reingest(payload: ReingestRequest, db: Session = Depends(get_db)) -> ReingestResponse:
     if payload.from_ > payload.to:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="from deve ser menor ou igual a to")
+    range_days = (payload.to - payload.from_).days
+    if range_days > settings.ingest_max_range_days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Intervalo de {range_days} dias excede o maximo permitido de {settings.ingest_max_range_days} dias",
+        )
     cloud = payload.cloud.lower().strip()
     if cloud not in {"aws", "azure", "oci", "all"}:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="cloud inválida")

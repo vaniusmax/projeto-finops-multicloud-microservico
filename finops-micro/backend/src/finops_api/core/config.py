@@ -49,6 +49,16 @@ class Settings(BaseSettings):
     oci_compartment_depth: int = Field(default=6, alias="OCI_COMPARTMENT_DEPTH")
     tenant_configs_json: str = Field(default="{}", alias="TENANT_CONFIGS_JSON")
 
+    cli_subprocess_timeout: int = Field(default=300, alias="CLI_SUBPROCESS_TIMEOUT")
+    cli_retry_attempts: int = Field(default=3, alias="CLI_RETRY_ATTEMPTS")
+    cli_retry_delay: float = Field(default=5.0, alias="CLI_RETRY_DELAY")
+    ingest_max_range_days: int = Field(default=366, alias="INGEST_MAX_RANGE_DAYS")
+    ingest_batch_size: int = Field(default=500, alias="INGEST_BATCH_SIZE")
+
+    db_pool_size: int = Field(default=10, alias="DB_POOL_SIZE")
+    db_max_overflow: int = Field(default=20, alias="DB_MAX_OVERFLOW")
+    db_pool_timeout: int = Field(default=30, alias="DB_POOL_TIMEOUT")
+
     auth_allowed_email_domains: str = Field(
         default="algar.com.br,algartelecom.com.br",
         alias="AUTH_ALLOWED_EMAIL_DOMAINS",

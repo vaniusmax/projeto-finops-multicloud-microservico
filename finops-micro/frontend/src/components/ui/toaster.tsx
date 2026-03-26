@@ -7,8 +7,15 @@ import { ToastContext, type ToastItem } from "@/hooks/use-toast";
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
 
+  function generateToastId() {
+    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
+      return crypto.randomUUID();
+    }
+    return `toast-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+
   function pushToast(toast: Omit<ToastItem, "id">) {
-    const id = crypto.randomUUID();
+    const id = generateToastId();
     setToasts((prev) => [...prev, { ...toast, id }]);
   }
 

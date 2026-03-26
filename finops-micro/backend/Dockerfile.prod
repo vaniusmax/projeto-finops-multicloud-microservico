@@ -6,6 +6,38 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
 ENV PYTHONPATH=/app/src
 
+ARG TARGETARCH
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    groff \
+    less \
+    lsb-release \
+    python3-venv \
+    unzip \
+  && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+  case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+    amd64) aws_arch="x86_64" ;; \
+    arm64) aws_arch="aarch64" ;; \
+    *) echo "Arquitetura nao suportada para AWS CLI: ${TARGETARCH:-unknown}" >&2; exit 1 ;; \
+  esac; \
+  tmp_dir="$(mktemp -d)"; \
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o "${tmp_dir}/awscliv2.zip"; \
+  unzip -q "${tmp_dir}/awscliv2.zip" -d "${tmp_dir}"; \
+  "${tmp_dir}/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update; \
+  rm -rf "${tmp_dir}"
+
+RUN curl -fsSL https://aka.ms/InstallAzureCLIDeb | bash
+
+RUN bash -c "$(curl -L https://raw.githubusercontent.com/oracle/oci-cli/master/scripts/install/install.sh)" -- \
+  --accept-all-defaults \
+  --exec-dir /usr/local/bin \
+  --install-dir /opt/oci-cli
+
 RUN addgroup --system app && adduser --system --ingroup app app
 
 COPY requirements.txt ./

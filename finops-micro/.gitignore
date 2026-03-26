@@ -2,6 +2,8 @@
 **/__pycache__/
 **/.pytest_cache/
 **/.next/
+**/.next-dev/
 **/node_modules/
 **/.env
 **/.env.local
+**/*.tsbuildinfo
