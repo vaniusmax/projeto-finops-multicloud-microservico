@@ -1,16 +1,47 @@
 # FinOps Micro Backend
 
-API RESTful FastAPI para analytics FinOps usando Postgres canônico v0.
+API FastAPI responsável por autenticação, tenants por cloud, ingestão (AWS/Azure/OCI) e analytics FinOps.
+
+## Stack
+
+- Python 3.13
+- FastAPI + SQLAlchemy + Alembic
+- PostgreSQL
+- Ingestão via CLIs: `aws`, `az`, `oci`
+
+## Pré-requisitos
+
+- Python 3.13
+- Ambiente virtual (`uv` recomendado)
+- PostgreSQL acessível pelo `DATABASE_URL`
+- CLIs de cloud autenticadas quando houver ingestão manual/automática
+
+## Configuração
+
+```bash
+cd finops-micro/backend
+cp .env.example .env
+```
+
+Variáveis importantes:
+
+- API e CORS: `API_PREFIX`, `CORS_ORIGINS`, `CORS_ORIGIN_REGEX`
+- Banco: `DATABASE_URL`
+- Ingestão automática: `AUTO_INGEST_ON_REQUEST`
+- Clouds: `AWS_*`, `AZURE_*`, `OCI_*`, `TENANT_CONFIGS_JSON`
+- Metas: `TARGET_*`, `MONTHLY_TARGETS_JSON`
+- Câmbio USD/BRL: `CURRENCY_RATE_*`, `USD_RATE_FALLBACK`
+- Auth/e-mail: `AUTH_*`, `SMTP_*`
 
 ## Rodar local (uv)
 
 ```bash
 cd finops-micro/backend
 uv venv
-uv sync
+uv sync --extra dev
 cp .env.example .env
 uv run alembic upgrade head
-uvicorn finops_api.main:app --reload --port 8000
+uv run uvicorn finops_api.main:app --reload --port 8000
 ```
 
 ## Rodar local (pip)
@@ -25,30 +56,68 @@ cp .env.example .env
 uvicorn finops_api.main:app --reload --port 8000
 ```
 
-## Testes
-
-```bash
-python -m pytest
-```
-
-## Atalhos com Makefile
+## Makefile (atalhos)
 
 ```bash
 cd finops-micro/backend
 make install
 make migrate
 make run
+make test
 ```
 
-Se o `.env` estiver apontando para rede interna Docker (`finops-db`), rode:
+Se precisar forçar host local do Postgres:
 
 ```bash
 make migrate-local
 ```
 
-## Ingestao via CLI dos cloud providers
+## Endpoints ativos (`/api/v1`)
 
-Com variaveis no `.env` e CLIs autenticadas (`aws`, `az`, `oci`):
+### Health
+
+- `GET /health`
+
+### Auth
+
+- `POST /auth/register`
+- `POST /auth/verify-email`
+- `POST /auth/login`
+- `GET /auth/me`
+- `POST /auth/logout`
+
+### Cloud
+
+- `GET /cloud/{cloud}/tenants`
+
+`cloud` aceito: `aws`, `azure`, `oci`.
+
+### FinOps
+
+- `GET /finops/summary`
+- `GET /finops/daily`
+- `GET /finops/top-services`
+- `GET /finops/top-accounts`
+- `GET /finops/filters`
+- `POST /finops/ai/insights`
+- `POST /finops/analytics/insights`
+- `GET /finops/cost-explorer/snapshot`
+- `GET /finops/cost-explorer/breakdown`
+- `GET /finops/cost-explorer/trend`
+- `POST /finops/cost-explorer/insights`
+- `POST /finops/reingest`
+
+Parâmetros principais de analytics:
+
+- `cloud=aws|azure|oci|all`
+- `tenant_key` (quando multi-tenant por cloud)
+- `from`, `to` (intervalo)
+- `currency=BRL|USD`
+- `topN` (quando aplicável)
+
+## Ingestão por CLI (manual)
+
+Com `.env` configurado e CLIs autenticadas:
 
 ```bash
 cd finops-micro/backend
@@ -58,24 +127,33 @@ cd finops-micro/backend
 .venv/bin/python -m finops_api.jobs.ingest_cli providers --provider all --start 2026-01-01 --end 2026-01-31
 ```
 
-Auto-ingest no carregamento do frontend:
-- Ao chamar `summary`, `timeseries` ou `top-services`, a API tenta ingestao CLI automaticamente quando nao ha dados no intervalo solicitado.
-- Controle por env: `AUTO_INGEST_ON_REQUEST=true|false`.
+## Auto-ingest e refresh
 
-## Cotacao USD/BRL com Agno
+- Com `AUTO_INGEST_ON_REQUEST=true`, a API tenta preencher lacunas do período sob demanda.
+- Para forçar recarga no request, use `refresh=true` nos endpoints `GET /finops/*`.
+- Para reprocessamento explícito, use `POST /finops/reingest`.
 
-O backend continua persistindo a cotacao em `dim_currency_rate`, mas agora pode usar Agno + OpenAI + YFinance para buscar a taxa corrente antes do fallback HTTP.
+## Migrations e schema
 
-Ordem de tentativa para datas correntes:
-- `AgnoAgent` com `OpenAIChat` e `YFinanceTools`
-- `YFinanceTools` direto
-- provider HTTP configurado em `CURRENCY_RATE_PROVIDER_URL`
+Fonte de verdade evolutiva:
 
-Configuracao opcional no `.env`:
-- `CURRENCY_RATE_AGNO_ENABLED=true`
-- `CURRENCY_RATE_YFINANCE_ENABLED=true`
-- `OPENAI_API_KEY=...`
-- `OPENAI_MODEL=gpt-4o-mini`
-- `OPENAI_API_BASE=` opcional
+- `src/finops_api/db/migrations/versions`
 
-Se Agno/OpenAI nao estiverem disponiveis, a arquitetura atual segue funcionando via HTTP e persistencia normal na tabela canônica.
+Comandos úteis:
+
+```bash
+uv run alembic current
+uv run alembic upgrade head
+```
+
+## Testes
+
+```bash
+cd finops-micro/backend
+python -m pytest
+```
+
+## Produção (container)
+
+A imagem de produção instala AWS CLI, Azure CLI e OCI CLI.
+No deploy via `finops-traefik-stack`, monte as credenciais do host conforme `docker-compose.backend.yml`.

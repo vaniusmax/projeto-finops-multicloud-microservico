@@ -54,3 +54,7 @@ projeto-finops-multicloud/
 **/tmp/
 **/.cache/
 *.zip
+
+# Secrets and private keys
+**/*.pem
+**/*.key

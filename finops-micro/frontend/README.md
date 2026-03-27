@@ -1,67 +1,73 @@
 # FinOps Multicloud Frontend
 
-Frontend Next.js (App Router) para painel FinOps Multicloud com shell enterprise: sidebar de navegação, topbar global, drawer de filtros avançados e módulos funcionais.
+Frontend Next.js do workspace FinOps (overview, analytics, cost explorer, tendências, budgets, IA e configurações).
 
 ## Stack
 
-- Next.js 14+ (App Router) + TypeScript
+- Next.js 14 (App Router) + TypeScript
 - TailwindCSS
-- Componentes estilo shadcn/ui (`Button`, `Card`, `Tabs`, `Select`, `Badge`, `Input`, `Dialog`, `Tooltip`)
-- TanStack Query (React Query)
-- TanStack Table
+- React Query (TanStack Query)
 - Recharts
 - Zod
-- ESLint + Prettier
 
-## Como rodar
+## Pré-requisitos
+
+- Node.js 22+
+- npm
+
+## Executar localmente
 
 ```bash
+cd finops-micro/frontend
 npm install
 npm run dev
 ```
 
-Aplicação em `http://localhost:3000`.
+Aplicação: `http://localhost:3000`
 
-Scripts recomendados:
-- `npm run dev`: desenvolvimento normal com `next dev`
-- `npm run dev:warmup`: desenvolvimento com prewarm das rotas mais usadas
-- `npm run serve:stable`: build + start em modo produção local, recomendado quando o ambiente apresentar instabilidade em assets `/_next/static/*`
+## Scripts
 
-Os modos de execução agora usam diretórios separados:
-- `dev` e `dev:warmup` usam `.next-dev`
-- `build` e `start` usam `.next`
-
-Isso evita corrupção do artefato quando `next dev` e `next start` são usados em momentos diferentes no mesmo ambiente.
-
-Se quiser subir o Next puro, sem prewarm, use:
-
-```bash
-npm run dev:raw
-```
-
-Se o navegador entrar em estado inconsistente após reinícios, prefira `npm run serve:stable` em vez de `npm run dev`.
+- `npm run dev`: desenvolvimento com `NEXT_DIST_DIR=.next-dev`
+- `npm run dev:warmup`: dev com prewarm de rotas
+- `npm run dev:raw`: dev direto sem prewarm
+- `npm run build`: build de produção (usa `.next`)
+- `npm run start`: start de produção local
+- `npm run serve:stable`: build + start
+- `npm run lint`: lint
 
 ## Variáveis de ambiente
 
 Crie `.env.local`:
 
 ```env
-NEXT_PUBLIC_API_GATEWAY_URL=
-NEXT_PUBLIC_FINOPS_SERVICE_URL=
+NEXT_PUBLIC_API_GATEWAY_URL=http://localhost:8000
 NEXT_PUBLIC_API_BASE_PATH=/api/v1
 NEXT_PUBLIC_USE_MOCKS=false
 ```
 
-## Gateway x Microservice
+Resolução de base URL:
 
-A seleção de base URL funciona assim:
+1. Usa `NEXT_PUBLIC_API_GATEWAY_URL` como host base.
+2. Prefixa rotas com `NEXT_PUBLIC_API_BASE_PATH`.
+3. Se o gateway estiver vazio ou `NEXT_PUBLIC_USE_MOCKS=true`, usa mocks locais tipados.
 
-1. Se `NEXT_PUBLIC_API_GATEWAY_URL` estiver definido, ele é usado.
-2. Senão, usa `NEXT_PUBLIC_FINOPS_SERVICE_URL`.
-3. O frontend prefixa rotas com `NEXT_PUBLIC_API_BASE_PATH` (default `/api/v1`).
-4. Se nenhum estiver definido (ou `NEXT_PUBLIC_USE_MOCKS=true`), usa mocks tipados locais.
+## Contrato de API consumido
 
-## Endpoints consumidos
+Com `API_BASE_PATH=/api/v1`, o frontend usa:
+
+### Auth
+
+- `POST /auth/register`
+- `POST /auth/verify-email`
+- `POST /auth/login`
+- `GET /auth/me`
+- `POST /auth/logout`
+
+### Cloud
+
+- `GET /cloud/{cloud}/tenants`
+
+### FinOps
 
 - `GET /finops/summary`
 - `GET /finops/daily`
@@ -69,36 +75,46 @@ A seleção de base URL funciona assim:
 - `GET /finops/top-accounts`
 - `GET /finops/filters`
 - `POST /finops/ai/insights`
+- `POST /finops/analytics/insights`
+- `GET /finops/cost-explorer/snapshot`
+- `GET /finops/cost-explorer/breakdown`
+- `GET /finops/cost-explorer/trend`
+- `POST /finops/cost-explorer/insights`
+- `POST /finops/reingest`
 
 ## Rotas da UI
 
-- `/overview`: visão geral principal
-- `/analytics`: gráficos e tabelas operacionais
-- `/cost-explorer`: workspace para breakdowns
-- `/trends`: evolução temporal
-- `/budgets`: metas versus execução
-- `/ai`: assistente e insights
-- `/settings`: preferências do workspace
-- `/dashboard`: rota legada mantida, apontando para overview ou IA via `?tab=ai`
-- `/dashboard/weekly`: detalhamento semanal legado
+- `/overview`
+- `/analytics`
+- `/cost-explorer`
+- `/trends`
+- `/budgets`
+- `/ai`
+- `/settings`
+- `/login`
+- `/verify-email`
 
-## Novo layout
+Rotas legadas mantidas por compatibilidade:
 
-- `src/components/layout/AppShell.tsx`: shell principal com sidebar, topbar e workspace.
-- `src/components/layout/Topbar.tsx`: filtros globais de cloud, período, moeda, compare e refresh.
-- `src/components/layout/FilterDrawer.tsx`: filtros avançados de `topN`, serviços e linked accounts.
-- `src/components/layout/SidebarNav.tsx`: navegação lateral colapsável.
-- `src/contexts/AppContext.tsx`: estado global de UI e preferências locais.
+- `/dashboard`
+- `/dashboard/weekly`
 
-## Como os filtros funcionam
+## Filtros e estado
 
-- Filtros principais continuam serializados na URL (`cloud`, `from`, `to`, `currency`, `topN`, `services`, `accounts`).
-- `useDashboardFilters` mantém compatibilidade com os endpoints atuais e preserva outros query params, como `tab=ai`.
-- Preferências de layout (`compareMode`, sidebar colapsada e saved views) ficam em `localStorage`.
-- O drawer apenas muda a UI dos filtros avançados; as chamadas do backend permanecem as mesmas.
+- Filtros de negócio na URL: `cloud`, `tenant`, `from`, `to`, `currency`, `topN`, `services`, `accounts`.
+- Preferências de UI (compare mode, sidebar, saved views) em `localStorage`.
 
 ## Mocks tipados
 
-Fixtures em `src/lib/mocks/fixtures.ts`, roteadas por `src/lib/mocks/mock-api.ts`.
+- Fixtures: `src/lib/mocks/fixtures.ts`
+- Mock router: `src/lib/mocks/mock-api.ts`
 
-Com isso, a UI roda sem backend e mantém o contrato de API validado por Zod.
+## Build de produção (Docker)
+
+O `Dockerfile.prod` recebe:
+
+- `NEXT_PUBLIC_API_GATEWAY_URL`
+- `NEXT_PUBLIC_API_BASE_PATH`
+- `NEXT_PUBLIC_USE_MOCKS`
+
+No fluxo oficial, esses valores vêm de `finops-traefik-stack/.env.frontend`.

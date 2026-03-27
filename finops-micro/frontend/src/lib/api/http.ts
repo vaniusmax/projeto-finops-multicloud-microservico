@@ -10,12 +10,10 @@ export class ApiError extends Error {
   }
 }
 
-const gateway = process.env.NEXT_PUBLIC_API_GATEWAY_URL;
-const finopsService = process.env.NEXT_PUBLIC_FINOPS_SERVICE_URL;
-const directBase = process.env.NEXT_PUBLIC_API_BASE_URL;
+const gateway = process.env.NEXT_PUBLIC_API_GATEWAY_URL ?? "";
 const apiBasePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? "/api/v1";
 
-export const baseURL = gateway ?? finopsService ?? directBase ?? "";
+export const baseURL = gateway.replace(/\/+$/, "");
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === "true" || !baseURL;
 
 type RequestConfig = {

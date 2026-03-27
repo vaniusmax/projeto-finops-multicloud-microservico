@@ -1,161 +1,183 @@
-# FinOps Stack (Traefik + DB + Backend + Frontend)
+# FinOps Stack (Traefik + Postgres + Backend + Frontend)
 
-Esta pasta agora possui 3 stacks Docker Compose:
+Stack oficial de infraestrutura e deploy para o FinOps Multicloud.
 
-- `docker-compose.yml`: infraestrutura base (Traefik, Postgres, pgAdmin, Portainer)
-- `docker-compose.backend.yml`: API FastAPI (`finops-api`)
-- `docker-compose.frontend.yml`: app Next.js (`finops-web`)
+## Escopo desta pasta
+
+- `docker-compose.yml`: base (Traefik, Postgres, pgAdmin, Portainer)
+- `docker-compose.backend.yml`: API `finops-api`
+- `docker-compose.frontend.yml`: web `finops-web`
+- `Makefile`: comandos operacionais
+- `scripts/001_finops_canonical_v0.sql`: bootstrap SQL da base
+- `scripts/002_finops_multi_tenant.sql`: upgrade SQL multi-tenant
+
+## Fonte de verdade
+
+- Operação de ambiente: Compose/Makefile desta pasta
+- Evolução de schema da aplicação: Alembic em `../finops-micro/backend/src/finops_api/db/migrations/versions`
+- Deploy da aplicação: imagens Docker Hub (`vaniusoliveira/finops-backend`, `vaniusoliveira/finops-frontend`)
 
 ## Pré-requisitos
 
 - Docker + Docker Compose v2
-- OpenSSL (para gerar certificado local)
+- OpenSSL (opcional para certificado local)
 
-## Hosts locais
+## Host local
 
-Adicione no seu `/etc/hosts`:
+Adicione no `/etc/hosts`:
 
 ```txt
 127.0.0.1 finops.local
 ```
 
-## 1) Gerar certificado local (opcional)
+## Configuração de ambiente
+
+```bash
+cd finops-traefik-stack
+cp .env.backend.example .env.backend
+cp .env.frontend.example .env.frontend
+printf "FINOPS_BASE_HOST=finops.local\n" > .env
+```
+
+Arquivos:
+
+- `.env`: host base do Traefik (`FINOPS_BASE_HOST`)
+- `.env.backend`: imagem e variáveis da API
+- `.env.frontend`: imagem e variáveis do Next.js
+
+## Subir ambiente local
+
+### 1) (Opcional) certificado local
 
 ```bash
 make cert
 ```
 
-## 2) Subir stack base (Traefik + DB + utilitários)
+### 2) Subir base (Traefik + DB + utilitários)
 
 ```bash
 make up
 ```
 
-URLs:
+`make up` também executa `make sql-init` para aplicar `scripts/001_finops_canonical_v0.sql`.
 
-- Traefik Dashboard: `http://finops.local/traefik/dashboard/`
-- Portainer: `http://finops.local/portainer`
-- pgAdmin: `http://finops.local/pgadmin`
-- Postgres: `localhost:5432`
-
-Credenciais padrão do Postgres:
-
-- DB: `finops`
-- User: `finops`
-- Pass: `finops123`
-
-## 3) Configurar backend e frontend
-
-```bash
-cp .env.backend.example .env.backend
-cp .env.frontend.example .env.frontend
-```
-
-Ajuste principalmente:
-
-- `.env.backend`: `DATABASE_URL`, `FINOPS_API_HOST`, `CORS_ORIGINS`, `AUTH_FRONTEND_BASE_URL`
-- `.env.frontend`: `FINOPS_WEB_HOST`, `NEXT_PUBLIC_API_GATEWAY_URL`
-
-## 4) Subir as stacks da aplicação
+### 3) Subir aplicações
 
 ```bash
 make backend-up
 make frontend-up
 ```
 
-Ou subir as duas:
+Ou:
 
 ```bash
 make app-up
 ```
 
-URLs:
+## URLs locais
 
-- API Health: `http://finops.local/api/v1/health`
 - Frontend: `http://finops.local`
+- API health: `http://finops.local/api/v1/health`
+- Traefik: `http://finops.local/traefik/dashboard/`
+- pgAdmin: `http://finops.local/pgadmin`
+- Portainer: `http://finops.local/portainer`
+- Postgres: `localhost:5432`
 
-## Deploy no servidor remoto (Docker Hub)
+Credenciais padrão do Postgres (local):
 
-Fluxo recomendado para produção: usar imagens publicadas no Docker Hub.
+- DB: `finops`
+- User: `finops`
+- Password: `finops123`
 
-### 1) Preparar DNS e firewall
+## Banco de dados
 
-- Aponte o host para o IP público do servidor:
-  - `finops.seudominio.com` -> frontend, backend e endpoints auxiliares por path
-- Libere portas de entrada no servidor/security group:
-  - `22` (SSH)
-  - `80` e `443` (Traefik)
-- Restrinja `5432` (Postgres) para IPs confiáveis ou mantenha fechado publicamente.
-
-### 2) Copiar a stack para o servidor
-
-No seu computador local:
+Comandos úteis:
 
 ```bash
-scp -i finops-dash-key.pem -o StrictHostKeyChecking=accept-new -r finops-traefik-stack ubuntu@SEU_IP:~/
+make sql-init
+make sql-upgrade-multi-tenant
+make psql
 ```
 
-### 3) Acessar servidor e configurar variáveis
+- `sql-init`: aplica schema canônico inicial.
+- `sql-upgrade-multi-tenant`: aplica ajustes de multi-tenant.
+
+## Credenciais de CLI para ingestão (produção)
+
+O `finops-api` monta diretórios do host para leitura de credenciais:
+
+- `/home/ubuntu/.aws -> /home/ubuntu/.aws:ro`
+- `/home/ubuntu/.azure -> /home/ubuntu/.azure`
+- `/home/ubuntu/.oci -> /home/ubuntu/.oci:ro`
+
+Além disso, use `.env.backend` para apontar perfis/paths (`AWS_PROFILE`, `AZURE_*`, `OCI_*`, `TENANT_CONFIGS_JSON`).
+
+Validação rápida no container:
 
 ```bash
-ssh -i finops-dash-key.pem ubuntu@SEU_IP
+docker compose -f docker-compose.backend.yml --env-file .env.backend exec finops-api aws sts get-caller-identity
+docker compose -f docker-compose.backend.yml --env-file .env.backend exec finops-api az account show
+docker compose -f docker-compose.backend.yml --env-file .env.backend exec finops-api oci iam region list --profile DEFAULT
+```
+
+## Deploy via Docker Hub (produção)
+
+### 1) Copiar stack para servidor
+
+```bash
+scp -i ~/.ssh/SEU_ARQUIVO_CHAVE.pem -o StrictHostKeyChecking=accept-new -r finops-traefik-stack ubuntu@SEU_IP:~/
+```
+
+### 2) Configurar variáveis no servidor
+
+```bash
+ssh -i ~/.ssh/SEU_ARQUIVO_CHAVE.pem ubuntu@SEU_IP
 cd ~/finops-traefik-stack
 cp .env.backend.example .env.backend
 cp .env.frontend.example .env.frontend
 printf "FINOPS_BASE_HOST=finops.seudominio.com\n" > .env
 ```
 
-Edite os arquivos:
+Ajuste principalmente:
 
-- `.env`
-  - `FINOPS_BASE_HOST=finops.seudominio.com`
-- `.env.backend`
-  - `BACKEND_IMAGE=vaniusoliveira/finops-backend:latest`
-  - `FINOPS_API_HOST=finops.seudominio.com`
-  - `CORS_ORIGINS=https://finops.seudominio.com`
-  - `AUTH_FRONTEND_BASE_URL=https://finops.seudominio.com`
-  - `DATABASE_URL=postgresql+psycopg2://...`
-- `.env.frontend`
-  - `FRONTEND_IMAGE=vaniusoliveira/finops-frontend:latest`
-  - `FINOPS_WEB_HOST=finops.seudominio.com`
-  - `NEXT_PUBLIC_API_GATEWAY_URL=https://finops.seudominio.com`
+- `.env.backend`: `BACKEND_IMAGE`, `DATABASE_URL`, `FINOPS_API_HOST`, `CORS_ORIGINS`, `AUTH_FRONTEND_BASE_URL`
+- `.env.frontend`: `FRONTEND_IMAGE`, `FINOPS_WEB_HOST`, `NEXT_PUBLIC_API_GATEWAY_URL`
 
-### 4) Subir stack base
+### 3) Subir base
 
 ```bash
 make up
 ```
 
-### 5) Deploy da aplicação direto do Docker Hub
+### 4) Deploy das aplicações por imagem publicada
 
 ```bash
 make hub-deploy
 ```
 
-Esse comando faz `pull` das imagens e recria `finops-api` e `finops-web` com `--no-build`.
-
-### 6) Validar deploy
+### 5) Validar
 
 ```bash
 make app-status
 curl -fsS https://finops.seudominio.com/api/v1/health
 ```
 
-### 7) Atualizar versões publicadas
-
-Sempre que subir uma nova imagem no Docker Hub:
+## Comandos operacionais
 
 ```bash
-make hub-deploy
+make status
+make logs
+make backend-status
+make backend-logs
+make frontend-status
+make frontend-logs
+make app-status
+make app-logs
+make app-down
+make reset
 ```
 
-## Comandos úteis
+## Observações
 
-```bash
-make status            # stack base
-make backend-status    # stack backend
-make frontend-status   # stack frontend
-make hub-deploy        # pull + deploy backend/frontend via Docker Hub
-make psql              # acesso ao postgres
-make reset             # recria stack base e reexecuta SQL init
-```
+- O `backend` executa `alembic upgrade head` no start do container.
+- Evite versionar chaves privadas e arquivos de credenciais no repositório.

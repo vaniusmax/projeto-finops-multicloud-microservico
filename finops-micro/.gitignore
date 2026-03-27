@@ -7,3 +7,5 @@
 **/.env
 **/.env.local
 **/*.tsbuildinfo
+**/*.pem
+**/*.key
