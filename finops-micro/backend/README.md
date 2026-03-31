@@ -31,6 +31,7 @@ Variáveis importantes:
 - Clouds: `AWS_*`, `AZURE_*`, `OCI_*`, `TENANT_CONFIGS_JSON`
 - Metas: `TARGET_*`, `MONTHLY_TARGETS_JSON`
 - Câmbio USD/BRL: `CURRENCY_RATE_*`, `USD_RATE_FALLBACK`
+- IA (insights): `OPENAI_API_KEY`, `OPENAI_MODEL` (default: `gpt-5.4`), `OPENAI_API_BASE`
 - Auth/e-mail: `AUTH_*`, `SMTP_*`
 
 ## Rodar local (uv)

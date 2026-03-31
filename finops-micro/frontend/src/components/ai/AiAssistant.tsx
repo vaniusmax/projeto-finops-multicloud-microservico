@@ -4,6 +4,7 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 
 import { postAiInsights } from "@/lib/api/finops";
+import { ApiError } from "@/lib/api/http";
 import type { DashboardFilters } from "@/lib/query/search-params";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -12,7 +13,8 @@ import { Input } from "@/components/ui/input";
 type Message = {
   role: "user" | "assistant";
   text: string;
-  bullets?: string[];
+  highlights?: string[];
+  actions?: string[];
 };
 
 type AiAssistantProps = {
@@ -23,6 +25,16 @@ export function AiAssistant({ filters }: AiAssistantProps) {
   const [question, setQuestion] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
 
+  function dedupe(items: string[]) {
+    const seen = new Set<string>();
+    return items.filter((item) => {
+      const key = item.trim().toLowerCase();
+      if (!key || seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+  }
+
   const mutation = useMutation({
     mutationFn: postAiInsights,
     onSuccess: (data) => {
@@ -31,27 +43,41 @@ export function AiAssistant({ filters }: AiAssistantProps) {
         {
           role: "assistant",
           text: data.answerMarkdown,
-          bullets: [...data.highlights, ...data.suggestedActions],
+          highlights: dedupe(data.highlights),
+          actions: dedupe(data.suggestedActions),
         },
       ]);
+    },
+    onError: (error) => {
+      const detail =
+        error instanceof ApiError
+          ? error.message
+          : "Nao foi possivel consultar o assistente com os dados atuais. Tente novamente.";
+      setMessages((prev) => [...prev, { role: "assistant", text: detail }]);
     },
   });
 
   function onAsk() {
-    if (!question.trim()) return;
+    const trimmedQuestion = question.trim();
+    if (!trimmedQuestion || mutation.isPending) return;
 
-    setMessages((prev) => [...prev, { role: "user", text: question }]);
+    const history = [...messages.slice(-7), { role: "user" as const, text: trimmedQuestion }].map(({ role, text }) => ({
+      role,
+      text,
+    }));
+
+    setMessages((prev) => [...prev, { role: "user", text: trimmedQuestion }]);
     mutation.mutate({
       cloud: filters.cloud,
       tenant: filters.tenant,
       from: filters.from,
       to: filters.to,
       currency: filters.currency,
-      question,
-      filters: {
-        services: filters.services,
-        accounts: filters.accounts,
-      },
+      topN: filters.topN,
+      services: filters.services,
+      accounts: filters.accounts,
+      question: trimmedQuestion,
+      history,
     });
     setQuestion("");
   }
@@ -73,16 +99,32 @@ export function AiAssistant({ filters }: AiAssistantProps) {
                 message.role === "user" ? "ml-10 bg-emerald-700 text-white shadow-sm" : "mr-10 border border-slate-200 bg-white text-slate-800"
               }`}
             >
-              <p>{message.text}</p>
-              {message.bullets?.length ? (
-                <ul className="mt-2 list-disc space-y-1 pl-4 text-xs">
-                  {message.bullets.map((item) => (
-                    <li key={item}>{item}</li>
-                  ))}
-                </ul>
+              <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+              {message.highlights?.length ? (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Pontos-chave</p>
+                  <ul className="list-disc space-y-1 pl-4 text-xs">
+                    {message.highlights.map((item) => (
+                      <li key={`h-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
+              {message.actions?.length ? (
+                <div className="mt-3">
+                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Ações recomendadas</p>
+                  <ul className="list-disc space-y-1 pl-4 text-xs">
+                    {message.actions.map((item) => (
+                      <li key={`a-${item}`}>{item}</li>
+                    ))}
+                  </ul>
+                </div>
               ) : null}
             </div>
           ))}
+          {mutation.isPending ? (
+            <div className="mr-10 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-500">Analisando os dados...</div>
+          ) : null}
         </div>
         <div className="flex gap-2">
           <Input

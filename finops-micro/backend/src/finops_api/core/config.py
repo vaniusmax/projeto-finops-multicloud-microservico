@@ -99,7 +99,7 @@ class Settings(BaseSettings):
     currency_rate_yfinance_enabled: bool = Field(default=True, alias="CURRENCY_RATE_YFINANCE_ENABLED")
     currency_rate_yfinance_symbol: str = Field(default="BRL=X", alias="CURRENCY_RATE_YFINANCE_SYMBOL")
     openai_api_key: str | None = Field(default=None, alias="OPENAI_API_KEY")
-    openai_model: str = Field(default="gpt-4o-mini", alias="OPENAI_MODEL")
+    openai_model: str = Field(default="gpt-5.4", alias="OPENAI_MODEL")
     openai_api_base: str | None = Field(default=None, alias="OPENAI_API_BASE")
     usd_rate_fallback: float | None = Field(default=5.1394, alias="USD_RATE_FALLBACK")
 

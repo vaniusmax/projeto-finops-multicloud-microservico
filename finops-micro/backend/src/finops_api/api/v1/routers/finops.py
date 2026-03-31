@@ -30,6 +30,7 @@ from finops_api.schemas.finops import (
 )
 from finops_api.services.analytics_service import AnalyticsService
 from finops_api.services.analytics_insight_service import AnalyticsInsightService
+from finops_api.services.ai_insight_service import AiInsightService
 from finops_api.services.auto_ingest_service import AutoIngestService
 from finops_api.services.cost_explorer_insight_service import CostExplorerInsightService
 from finops_api.services.cost_explorer_service import CostExplorerService
@@ -180,6 +181,15 @@ def parse_group_by(group_by: str = Query(default="service", alias="groupBy", pat
     return group_by
 
 
+def _resolve_payload_filter(primary: list[str] | None, fallback: dict[str, list[str]] | None, key: str) -> list[str] | None:
+    if primary is not None:
+        return [item for item in primary if item] or None
+    if not fallback:
+        return None
+    values = fallback.get(key) or []
+    return [item for item in values if item] or None
+
+
 @router.get("/summary", response_model=SummaryV2Response)
 def get_summary_v2(
     filters: QueryFilters = Depends(ensure_ingest_v2_summary),
@@ -243,24 +253,47 @@ def get_filters_v2(
 
 
 @router.post("/ai/insights", response_model=AiInsightResponse)
-def post_ai_insights_v2(payload: AiInsightRequest) -> AiInsightResponse:
+def post_ai_insights_v2(
+    payload: AiInsightRequest,
+    service: AnalyticsService = Depends(get_analytics_service),
+    db: Session = Depends(get_db),
+) -> AiInsightResponse:
     question = payload.question.strip()
-    return AiInsightResponse(
-        answerMarkdown=(
-            f"Pergunta recebida para {payload.cloud.upper()} ({payload.from_.isoformat()} a {payload.to.isoformat()}): {question}. "
-            "Use os destaques do dashboard para validar picos, serviços dominantes e contas com maior participação."
-        ),
-        highlights=[
-            "Verifique o pico diário e correlacione com deploys/cargas sazonais.",
-            "Compare top serviços com o período anterior para identificar regressões.",
-            "Revise linked accounts com maior share no total semanal.",
-        ],
-        suggestedActions=[
-            "Aplicar rightsizing em compute contínuo.",
-            "Validar políticas de retenção/lifecycle para storage.",
-            "Avaliar savings plans ou reservas para workloads estáveis.",
-        ],
+    if not question:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="question nao pode ser vazia")
+
+    tenant = TenantService(db).resolve_tenant(payload.cloud, payload.tenant_key)
+    tenant_id = tenant.tenant_id if tenant else None
+
+    AutoIngestService(db).ensure_range(payload.cloud, payload.from_, payload.to, tenant_key=payload.tenant_key)
+    try:
+        _assert_data_available(db, payload.cloud, payload.from_, payload.to, tenant_id=tenant_id)
+    except HTTPException as exc:
+        if exc.status_code != status.HTTP_409_CONFLICT:
+            raise
+        logger.warning(
+            "AI insights com cobertura parcial para cloud=%s tenant_id=%s intervalo=%s..%s: %s",
+            payload.cloud,
+            tenant_id,
+            payload.from_,
+            payload.to,
+            exc.detail,
+        )
+
+    services = _resolve_payload_filter(payload.services, payload.filters, "services")
+    accounts = _resolve_payload_filter(payload.accounts, payload.filters, "accounts")
+    filters = QueryFilters(
+        cloud=payload.cloud,
+        tenant_id=tenant_id,
+        tenant_key=payload.tenant_key,
+        start=payload.from_,
+        end=payload.to,
+        currency=payload.currency,
+        services=services,
+        accounts=accounts,
     )
+    history = [item.model_dump(mode="json") for item in payload.history]
+    return AiInsightService(service).generate(filters=filters, question=question, top_n=payload.topN, history=history)
 
 
 @router.post("/analytics/insights", response_model=AnalyticsInsightResponse)

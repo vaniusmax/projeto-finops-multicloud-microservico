@@ -88,11 +88,14 @@ export async function getCloudTenants(cloud: string): Promise<TenantsResponse> {
 }
 
 export type AiInsightPayload = CommonFilters & {
+  topN: number;
+  services?: string[];
+  accounts?: string[];
   question: string;
-  filters: {
-    services: string[];
-    accounts: string[];
-  };
+  history?: Array<{
+    role: "user" | "assistant";
+    text: string;
+  }>;
 };
 
 export async function postAiInsights(payload: AiInsightPayload): Promise<AiInsightResponse> {
