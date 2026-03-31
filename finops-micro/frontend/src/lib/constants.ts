@@ -1,3 +1,5 @@
+import { getDefaultTenantForCloud } from "@/lib/tenant-policy";
+
 export const CLOUDS = ["AWS", "AZURE", "OCI"] as const;
 
 function toIso(day: Date) {
@@ -11,9 +13,10 @@ export function getDefaultFilters() {
   const today = new Date();
   const from = new Date(today);
   from.setDate(today.getDate() - 6);
+  const defaultCloud = "aws";
   return {
-    cloud: "aws",
-    tenant: "",
+    cloud: defaultCloud,
+    tenant: getDefaultTenantForCloud(defaultCloud),
     from: toIso(from),
     to: toIso(today),
     currency: "BRL" as const,

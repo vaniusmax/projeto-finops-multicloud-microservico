@@ -165,7 +165,7 @@ export function Topbar({ showAdvancedFilters = true, healthLabel = "Healthy" }: 
               <Cloud className="h-3.5 w-3.5" />
               Cloud
             </label>
-            <Select value={filters.cloud} onValueChange={(value) => updateFilters({ cloud: value, tenant: "" })}>
+            <Select value={filters.cloud} onValueChange={(value) => updateFilters({ cloud: value })}>
               <SelectTrigger className="border-none bg-transparent px-0 shadow-none">
                 <SelectValue />
               </SelectTrigger>

@@ -1,4 +1,5 @@
 import { getDefaultFilters } from "@/lib/constants";
+import { getDefaultTenantForCloud } from "@/lib/tenant-policy";
 
 export type DashboardFilters = {
   cloud: string;
@@ -15,9 +16,14 @@ export type CompareMode = "off" | "previous-period";
 
 export function parseFilters(searchParams: URLSearchParams): DashboardFilters {
   const defaults = getDefaultFilters();
+  const cloud = searchParams.get("cloud") ?? defaults.cloud;
+  const tenant =
+    cloud === "all"
+      ? ""
+      : searchParams.get("tenant") ?? (getDefaultTenantForCloud(cloud) || defaults.tenant);
   return {
-    cloud: searchParams.get("cloud") ?? defaults.cloud,
-    tenant: searchParams.get("tenant") ?? defaults.tenant,
+    cloud,
+    tenant,
     from: searchParams.get("from") ?? defaults.from,
     to: searchParams.get("to") ?? defaults.to,
     currency: searchParams.get("currency") === "USD" ? "USD" : "BRL",

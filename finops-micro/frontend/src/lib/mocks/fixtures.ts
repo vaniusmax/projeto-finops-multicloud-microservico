@@ -189,7 +189,11 @@ export const mockAiInsight: AiInsightResponse = {
   ],
 };
 
-export const mockTenants: TenantsResponse = [
-  { tenantKey: "OCI-TENANT-OCVS", tenantName: "OCI-TENANT-OCVS", cloud: "oci" },
-  { tenantKey: "OCI-TENANT-ORACLE-SOA", tenantName: "OCI-TENANT-ORACLE-SOA", cloud: "oci" },
-];
+export const mockTenantsByCloud: Record<string, TenantsResponse> = {
+  aws: [{ tenantKey: "default", tenantName: "default", cloud: "aws" }],
+  azure: [{ tenantKey: "mg-algar-finopsanalise", tenantName: "mg-algar-finopsanalise", cloud: "azure" }],
+  oci: [
+    { tenantKey: "OCI-TENANT-OCVS", tenantName: "OCI-TENANT-OCVS", cloud: "oci" },
+    { tenantKey: "OCI-TENANT-ORACLE-SOA", tenantName: "OCI-TENANT-ORACLE-SOA", cloud: "oci" },
+  ],
+};

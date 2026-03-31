@@ -61,6 +61,8 @@ class TenantService:
         resolved: dict[str, list[TenantRuntimeConfig]] = {}
         for cloud, tenant_keys in clouds.items():
             cloud_payload = config_payload.get(cloud) if isinstance(config_payload.get(cloud), dict) else {}
+            if not tenant_keys and isinstance(cloud_payload, dict):
+                tenant_keys = [str(item).strip() for item in cloud_payload.keys() if str(item).strip()]
             configs: list[TenantRuntimeConfig] = []
             for tenant_key in tenant_keys:
                 metadata = cloud_payload.get(tenant_key) if isinstance(cloud_payload, dict) else {}

@@ -1,4 +1,4 @@
-import { mockAiInsight, mockDaily, mockFilters, mockSummary, mockTenants, mockTopAccounts, mockTopServices } from "@/lib/mocks/fixtures";
+import { mockAiInsight, mockDaily, mockFilters, mockSummary, mockTenantsByCloud, mockTopAccounts, mockTopServices } from "@/lib/mocks/fixtures";
 
 function delay(ms = 350) {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -44,7 +44,10 @@ export async function mockRoute<T>({ path }: MockRouteRequest): Promise<T> {
   if (url.pathname.includes("/finops/top-services")) return mockTopServices.slice(0, topN) as T;
   if (url.pathname.includes("/finops/top-accounts")) return mockTopAccounts.slice(0, topN) as T;
   if (url.pathname.includes("/finops/filters")) return mockFilters as T;
-  if (url.pathname.includes("/cloud/") && url.pathname.includes("/tenants")) return mockTenants as T;
+  if (url.pathname.includes("/cloud/") && url.pathname.includes("/tenants")) {
+    const cloud = url.pathname.split("/").at(-2) ?? "";
+    return (mockTenantsByCloud[cloud] ?? []) as T;
+  }
   if (url.pathname.includes("/finops/ai/insights")) return mockAiInsight as T;
 
   throw new Error(`Mock route not implemented for ${url.pathname}`);

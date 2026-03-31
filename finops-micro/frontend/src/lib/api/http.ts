@@ -11,9 +11,27 @@ export class ApiError extends Error {
 }
 
 const gateway = process.env.NEXT_PUBLIC_API_GATEWAY_URL ?? "";
-const apiBasePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? "/api/v1";
+const legacyApiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
-export const baseURL = gateway.replace(/\/+$/, "");
+function resolveLegacyApiConfig(rawUrl: string): { baseURL: string; apiBasePath: string } | null {
+  if (!rawUrl) {
+    return null;
+  }
+  try {
+    const parsed = new URL(rawUrl);
+    return {
+      baseURL: parsed.origin,
+      apiBasePath: parsed.pathname || "/api/v1",
+    };
+  } catch {
+    return null;
+  }
+}
+
+const legacyApiConfig = resolveLegacyApiConfig(legacyApiBaseUrl);
+const apiBasePath = process.env.NEXT_PUBLIC_API_BASE_PATH ?? legacyApiConfig?.apiBasePath ?? "/api/v1";
+
+export const baseURL = gateway.replace(/\/+$/, "") || legacyApiConfig?.baseURL || "";
 const useMocks = process.env.NEXT_PUBLIC_USE_MOCKS === "true" || !baseURL;
 
 type RequestConfig = {

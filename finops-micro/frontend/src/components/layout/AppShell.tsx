@@ -9,6 +9,7 @@ import { Topbar } from "@/components/layout/Topbar";
 import { AppProvider, useAppContext } from "@/contexts/AppContext";
 import { useDashboardFilters } from "@/hooks/use-dashboard-filters";
 import { useTenantOptionsQuery } from "@/hooks/use-finops-queries";
+import { resolveTenantForCloud } from "@/lib/tenant-policy";
 
 type AppShellProps = {
   children: React.ReactNode;
@@ -44,19 +45,16 @@ function ShellFrame({
   const tenantOptions = useMemo(() => tenantOptionsQuery.data ?? [], [tenantOptionsQuery.data]);
   const isTenantBootstrapPending =
     filters.cloud !== "all" && !filters.tenant && (tenantOptionsQuery.isLoading || tenantOptionsQuery.isFetching);
-  const tenantExists = tenantOptions.some((item) => item.tenantKey === filters.tenant);
-  const needsTenantSelection = filters.cloud !== "all" && tenantOptions.length > 0 && !tenantExists;
+  const needsTenantSelection = filters.cloud !== "all" && tenantOptions.length > 0 && !filters.tenant;
+  const resolvedTenant = needsTenantSelection ? resolveTenantForCloud(filters.cloud, tenantOptions, filters.tenant) : "";
   const shouldHoldContent = isTenantBootstrapPending || needsTenantSelection;
 
   useEffect(() => {
-    if (!needsTenantSelection) {
+    if (!needsTenantSelection || !resolvedTenant) {
       return;
     }
-    const firstTenant = tenantOptions[0]?.tenantKey ?? "";
-    if (firstTenant && firstTenant !== filters.tenant) {
-      updateFilters({ tenant: firstTenant });
-    }
-  }, [filters.tenant, needsTenantSelection, tenantOptions, updateFilters]);
+    updateFilters({ tenant: resolvedTenant });
+  }, [needsTenantSelection, resolvedTenant, updateFilters]);
 
   return (
     <div className="min-h-screen bg-[#F4F6F7]">

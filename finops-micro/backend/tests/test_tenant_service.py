@@ -51,6 +51,24 @@ def test_load_tenants_by_cloud_parses_csv_and_json(monkeypatch) -> None:
     assert configs["oci"][0].metadata["tenant_id"] == "ocid1.tenancy.oc1..example"
 
 
+def test_load_tenants_by_cloud_uses_json_keys_when_csv_is_empty(monkeypatch) -> None:
+    monkeypatch.setattr("finops_api.services.tenant_service.settings.aws_tenants", "")
+    monkeypatch.setattr("finops_api.services.tenant_service.settings.azure_tenants", "")
+    monkeypatch.setattr("finops_api.services.tenant_service.settings.oci_tenants", "")
+    monkeypatch.setattr(
+        "finops_api.services.tenant_service.settings.tenant_configs_json",
+        (
+            '{"oci":{"OCI-TENANT-OCVS":{"profile":"OCI-TENANT-OCVS"},'
+            '"OCI-TENANT-ORACLE-SOA":{"profile":"OCI-TENANT-ORACLE-SOA"}}}'
+        ),
+    )
+
+    configs = TenantService.load_tenants_by_cloud()
+
+    assert [item.tenant_key for item in configs["oci"]] == ["OCI-TENANT-OCVS", "OCI-TENANT-ORACLE-SOA"]
+    assert [item.profile for item in configs["oci"]] == ["OCI-TENANT-OCVS", "OCI-TENANT-ORACLE-SOA"]
+
+
 def test_resolve_tenant_returns_tenant_id_for_explicit_key(monkeypatch) -> None:
     tenant = DimTenant(
         tenant_id=uuid4(),
