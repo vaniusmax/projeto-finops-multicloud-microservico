@@ -4,7 +4,7 @@ type TenantLike = {
 
 const DEFAULT_TENANT_BY_CLOUD: Record<string, string> = {
   aws: "default",
-  azure: "mg-algar-finopsanalise",
+  azure: "mg-algar-finops",
   oci: "OCI-TENANT-OCVS",
 };
 

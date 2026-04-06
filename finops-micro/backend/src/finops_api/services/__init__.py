@@ -1,5 +1,6 @@
 __all__ = [
     "ai_insight_service",
+    "ai_mcp_service",
     "analytics_service",
     "analytics_insight_service",
     "cost_explorer_service",

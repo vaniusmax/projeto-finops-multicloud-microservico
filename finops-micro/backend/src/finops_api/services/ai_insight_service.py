@@ -9,6 +9,7 @@ from finops_api.core.config import settings
 from finops_api.repositories.fact_cost_repo import QueryFilters
 from finops_api.schemas.finops import AiInsightResponse
 from finops_api.services.analytics_service import AnalyticsService
+from finops_api.services.ai_mcp_service import AiMcpService
 
 try:
     from openai import OpenAI
@@ -50,6 +51,14 @@ class AiInsightService:
         top_n: int,
         history: list[dict[str, str]] | None = None,
     ) -> AiInsightResponse:
+        mcp_result = AiMcpService(self.analytics).generate_if_applicable(
+            filters=filters,
+            question=question,
+            top_n=top_n,
+            history=history or [],
+        )
+        if mcp_result is not None:
+            return mcp_result
         payload = self._build_payload(filters=filters, question=question, top_n=top_n, history=history or [])
         llm_result = self._generate_with_llm(payload)
         if llm_result is not None:

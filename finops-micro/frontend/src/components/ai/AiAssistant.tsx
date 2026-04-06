@@ -9,6 +9,7 @@ import type { DashboardFilters } from "@/lib/query/search-params";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { MarkdownText } from "@/components/ui/markdown-text";
 
 type Message = {
   role: "user" | "assistant";
@@ -90,7 +91,7 @@ export function AiAssistant({ filters }: AiAssistantProps) {
       <CardContent>
         <div className="mb-4 h-[420px] space-y-3 overflow-auto rounded-2xl border border-slate-200 bg-slate-50 p-4">
           {messages.length === 0 ? (
-            <p className="text-sm text-slate-500">Faça uma pergunta sobre custos, variações ou otimizações.</p>
+            <p className="text-sm text-slate-500">Faça uma pergunta sobre custos, variações, comparações multi-cloud ou SQL.</p>
           ) : null}
           {messages.map((message, index) => (
             <div
@@ -99,7 +100,11 @@ export function AiAssistant({ filters }: AiAssistantProps) {
                 message.role === "user" ? "ml-10 bg-emerald-700 text-white shadow-sm" : "mr-10 border border-slate-200 bg-white text-slate-800"
               }`}
             >
-              <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+              {message.role === "assistant" ? (
+                <MarkdownText content={message.text} className="space-y-2" />
+              ) : (
+                <p className="whitespace-pre-wrap leading-relaxed">{message.text}</p>
+              )}
               {message.highlights?.length ? (
                 <div className="mt-3">
                   <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500">Pontos-chave</p>
@@ -130,7 +135,7 @@ export function AiAssistant({ filters }: AiAssistantProps) {
           <Input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            placeholder="Ex.: Qual serviço mais contribuiu para o pico semanal?"
+            placeholder="Ex.: Compare AWS vs Azure nos últimos 30 dias e mostre as maiores diferenças por serviço"
             onKeyDown={(e) => {
               if (e.key === "Enter") onAsk();
             }}
