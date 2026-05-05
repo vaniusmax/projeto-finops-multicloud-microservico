@@ -9,6 +9,7 @@ import {
   getCostExplorerTrend,
   getDaily,
   getFilters,
+  getOciTagCost,
   getSummary,
   getTopAccounts,
   getTopServices,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/api/finops";
 import { finopsKeys } from "@/lib/query/keys";
 import type { DashboardFilters } from "@/lib/query/search-params";
+import { isOciTagTenant } from "@/lib/tenant-policy";
 
 const memoryFirstQueryOptions = {
   staleTime: 1000 * 60,
@@ -138,5 +140,32 @@ export function useTenantOptionsQuery(cloud: string, enabled = true) {
     queryFn: () => getCloudTenants(cloud),
     ...memoryFirstQueryOptions,
     enabled: enabled && cloud !== "all",
+  });
+}
+
+export function useOciTagCostQuery(
+  filters: DashboardFilters,
+  tagNamespace: string,
+  tagKey: string,
+  enabled = true,
+) {
+  return useQuery({
+    queryKey: finopsKeys.ociTagCost(filters, tagNamespace, tagKey),
+    queryFn: () =>
+      getOciTagCost({
+        tenant: filters.tenant,
+        from: filters.from,
+        to: filters.to,
+        currency: filters.currency,
+        tagNamespace,
+        tagKey,
+        topN: filters.topN,
+      }),
+    ...memoryFirstQueryOptions,
+    enabled:
+      enabled &&
+      Boolean(tagNamespace) &&
+      Boolean(tagKey) &&
+      isOciTagTenant(filters.cloud, filters.tenant),
   });
 }

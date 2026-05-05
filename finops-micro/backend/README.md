@@ -12,7 +12,7 @@ API FastAPI responsável por autenticação, tenants por cloud, ingestão (AWS/A
 ## Pré-requisitos
 
 - Python 3.13
-- Ambiente virtual (`uv` recomendado)
+- `uv` (gerenciador de ambiente/dependências)
 - PostgreSQL acessível pelo `DATABASE_URL`
 - CLIs de cloud autenticadas quando houver ingestão manual/automática
 
@@ -43,18 +43,6 @@ uv sync --extra dev
 cp .env.example .env
 uv run alembic upgrade head
 uv run uvicorn finops_api.main:app --reload --port 8000
-```
-
-## Rodar local (pip)
-
-```bash
-cd finops-micro/backend
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-cp .env.example .env
-.venv/bin/python -m alembic upgrade head
-uvicorn finops_api.main:app --reload --port 8000
 ```
 
 ## Makefile (atalhos)
@@ -151,10 +139,11 @@ uv run alembic upgrade head
 
 ```bash
 cd finops-micro/backend
-python -m pytest
+uv run pytest -q
 ```
 
 ## Produção (container)
 
-A imagem de produção instala AWS CLI, Azure CLI e OCI CLI.
-No deploy via `finops-traefik-stack`, monte as credenciais do host conforme `docker-compose.backend.yml`.
+- A imagem de produção usa base com AWS CLI, Azure CLI e OCI CLI pré-instaladas (`Dockerfile.base-clls`).
+- No deploy via `finops-traefik-stack`, a operação oficial usa `docker-compose.yml` unificado com profiles.
+- Migrations em produção devem rodar via serviço isolado `finops-api-migrate` (`make migrate` na stack), não no startup do backend.

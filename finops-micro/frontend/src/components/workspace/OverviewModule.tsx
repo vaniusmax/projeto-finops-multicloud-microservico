@@ -7,27 +7,65 @@ import { HealthIndicator } from "@/components/dashboard/HealthIndicator";
 import { KPIStatCard } from "@/components/dashboard/KPIStatCard";
 import { LoadingGrid } from "@/components/dashboard/LoadingGrid";
 import { SectionCard } from "@/components/dashboard/SectionCard";
+import { EmptyState } from "@/components/dashboard/EmptyState";
 import { BarChartCost } from "@/components/charts/BarChartCost";
 import { LineChartDaily } from "@/components/charts/LineChartDaily";
+import { OciTagCostChart } from "@/components/charts/OciTagCostChart";
 import { WeeklyDrilldownModal } from "@/components/drilldown/WeeklyDrilldownModal";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { LinkedAccountTable } from "@/components/tables/LinkedAccountTable";
+import { OciTagCostGrid } from "@/components/tables/OciTagCostGrid";
 import { TopServicesTable } from "@/components/tables/TopServicesTable";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAppContext } from "@/contexts/AppContext";
-import { useDailyQuery, useSummaryQuery, useTopAccountsQuery, useTopServicesQuery } from "@/hooks/use-finops-queries";
+import {
+  useDailyQuery,
+  useOciTagCostQuery,
+  useSummaryQuery,
+  useTopAccountsQuery,
+  useTopServicesQuery,
+} from "@/hooks/use-finops-queries";
+import { formatMoney } from "@/lib/format";
+import { isOciTagTenant } from "@/lib/tenant-policy";
+
+const DEFAULT_OCI_TAG_NAMESPACE = "operation";
+const DEFAULT_OCI_TAG_KEY = "plataform";
 
 export function OverviewModule() {
   const { filters } = useAppContext();
   const [drilldownOpen, setDrilldownOpen] = useState(false);
   const [accountsChartType, setAccountsChartType] = useState<"bar" | "line" | "pie">("bar");
   const [dailyChartType, setDailyChartType] = useState<"line" | "bar" | "pie">("line");
+  const [ociTagNamespaceInput, setOciTagNamespaceInput] = useState(DEFAULT_OCI_TAG_NAMESPACE);
+  const [ociTagKeyInput, setOciTagKeyInput] = useState(DEFAULT_OCI_TAG_KEY);
+  const [appliedOciTagNamespace, setAppliedOciTagNamespace] = useState(DEFAULT_OCI_TAG_NAMESPACE);
+  const [appliedOciTagKey, setAppliedOciTagKey] = useState(DEFAULT_OCI_TAG_KEY);
 
   const chartFilters = { ...filters, topN: filters.topN };
   const summary = useSummaryQuery(filters);
   const daily = useDailyQuery(chartFilters);
   const topServices = useTopServicesQuery(chartFilters);
   const topAccounts = useTopAccountsQuery(chartFilters);
+
+  const showOciTagSection = isOciTagTenant(filters.cloud, filters.tenant);
+  const ociTagCost = useOciTagCostQuery(
+    filters,
+    appliedOciTagNamespace,
+    appliedOciTagKey,
+    showOciTagSection,
+  );
+
+  function handleApplyOciTag(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const namespace = ociTagNamespaceInput.trim();
+    const key = ociTagKeyInput.trim();
+    if (!namespace || !key) return;
+    setAppliedOciTagNamespace(namespace);
+    setAppliedOciTagKey(key);
+  }
 
   const isLoading = summary.isLoading || daily.isLoading || topServices.isLoading || topAccounts.isLoading;
 
@@ -169,6 +207,88 @@ export function OverviewModule() {
           <TopServicesTable data={topServices.data ?? []} currency={filters.currency} title="Top serviços" />
         </div>
       </section>
+
+      {showOciTagSection ? (
+        <SectionCard
+          title="COST DETAILS BY TAG"
+          description={`Custos diários do tenant ${filters.tenant} agrupados pela tag ${appliedOciTagNamespace} / ${appliedOciTagKey}.`}
+          action={
+            <form onSubmit={handleApplyOciTag} className="flex flex-wrap items-end gap-2">
+              <div>
+                <label
+                  htmlFor="oci-tag-namespace"
+                  className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500"
+                >
+                  TAG NAMESPACE
+                </label>
+                <Input
+                  id="oci-tag-namespace"
+                  value={ociTagNamespaceInput}
+                  onChange={(event) => setOciTagNamespaceInput(event.target.value)}
+                  placeholder="operation"
+                  autoComplete="off"
+                  className="mt-1 h-9 w-[140px]"
+                />
+              </div>
+              <div>
+                <label
+                  htmlFor="oci-tag-key"
+                  className="block text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500"
+                >
+                  TAG KEY
+                </label>
+                <Input
+                  id="oci-tag-key"
+                  value={ociTagKeyInput}
+                  onChange={(event) => setOciTagKeyInput(event.target.value)}
+                  placeholder="plataform"
+                  autoComplete="off"
+                  className="mt-1 h-9 w-[140px]"
+                />
+              </div>
+              <Button type="submit" size="sm" className="h-9">
+                Apply
+              </Button>
+            </form>
+          }
+          contentClassName="p-2 pt-0"
+        >
+          {ociTagCost.isLoading ? (
+            <Skeleton className="h-[520px] w-full rounded-2xl" />
+          ) : ociTagCost.isError ? (
+            <EmptyState
+              title="Não foi possível carregar os custos por tag"
+              description={
+                ociTagCost.error instanceof Error
+                  ? ociTagCost.error.message
+                  : "Verifique se o OCI CLI está acessível e se o tenant tem permissão de Usage API."
+              }
+            />
+          ) : !ociTagCost.data || ociTagCost.data.items.length === 0 ? (
+            <EmptyState
+                title="Sem dados para os filtros atuais"
+                description="Tente ampliar o período ou conferir se o namespace/key informado existe no tenant."
+              />
+          ) : (
+            <div className="space-y-4 p-2">
+              <section className="grid gap-4 xl:grid-cols-5">
+                <div className="xl:col-span-3">
+                  <OciTagCostChart data={ociTagCost.data} currency={filters.currency} />
+                </div>
+                <div className="xl:col-span-2">
+                  <OciTagCostGrid data={ociTagCost.data} currency={filters.currency} title="TAG BREAKDOWN GRID" />
+                </div>
+              </section>
+              <div className="flex items-center justify-between rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+                <span className="font-semibold uppercase tracking-[0.16em] text-slate-600">TOTAL DO PERÍODO</span>
+                <span className="text-lg font-semibold text-slate-900">
+                  {formatMoney(ociTagCost.data.totalPeriod, filters.currency)}
+                </span>
+              </div>
+            </div>
+          )}
+        </SectionCard>
+      ) : null}
 
       {summary.data && daily.data && topServices.data && topAccounts.data ? (
         <WeeklyDrilldownModal

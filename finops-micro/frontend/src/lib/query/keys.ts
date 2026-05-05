@@ -14,4 +14,9 @@ export const finopsKeys = {
     ["finops", "cost-explorer", "insights", filters, groupBy, selectedItem] as const,
   filters: (cloud: string, month: string, tenant: string) => ["finops", "filters", cloud, tenant, month] as const,
   tenants: (cloud: string) => ["finops", "tenants", cloud] as const,
+  ociTagCost: (
+    filters: DashboardFilters,
+    tagNamespace: string,
+    tagKey: string,
+  ) => ["finops", "oci-tag-cost", filters, tagNamespace, tagKey] as const,
 };

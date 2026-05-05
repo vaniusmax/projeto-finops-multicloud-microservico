@@ -8,6 +8,7 @@ import {
   costExplorerTrendSchema,
   dailySchema,
   filtersSchema,
+  ociTagCostSchema,
   summarySchema,
   tenantsSchema,
   topAccountsSchema,
@@ -20,6 +21,7 @@ import {
   type CostExplorerTrendResponse,
   type DailyResponse,
   type FiltersResponse,
+  type OciTagCostResponse,
   type SummaryResponse,
   type TenantsResponse,
   type TopAccountsResponse,
@@ -167,6 +169,32 @@ export async function postCostExplorerInsights(payload: CostExplorerParams): Pro
     body: { ...body, tenant_key: tenant || undefined },
   });
   return costExplorerInsightSchema.parse(data);
+}
+
+export type OciTagCostParams = {
+  tenant: string;
+  from: string;
+  to: string;
+  currency: "BRL" | "USD";
+  tagNamespace: string;
+  tagKey: string;
+  topN?: number;
+};
+
+export async function getOciTagCost(params: OciTagCostParams): Promise<OciTagCostResponse> {
+  const data = await request<unknown>({
+    path: "/finops/oci/tag-cost",
+    query: {
+      tenantKey: params.tenant,
+      from: params.from,
+      to: params.to,
+      currency: params.currency,
+      tagNamespace: params.tagNamespace,
+      tagKey: params.tagKey,
+      topN: params.topN,
+    },
+  });
+  return ociTagCostSchema.parse(data);
 }
 
 export type ReingestPayload = {

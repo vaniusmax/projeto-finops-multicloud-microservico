@@ -61,6 +61,16 @@ Para subir banco, proxy e aplicações no fluxo oficial:
 
 - `../finops-traefik-stack/README.md`
 
+Resumo do fluxo oficial:
+
+```bash
+cd ../finops-traefik-stack
+make up
+make sql-init      # primeira execução
+make migrate
+make app-up
+```
+
 ## Deploy de produção
 
 Use apenas a stack:
@@ -70,3 +80,5 @@ Use apenas a stack:
 Guia oficial:
 
 - `finops-traefik-stack/README.md`
+
+Observação: no deploy por Docker Hub, execute `make migrate` antes de `make hub-deploy`.

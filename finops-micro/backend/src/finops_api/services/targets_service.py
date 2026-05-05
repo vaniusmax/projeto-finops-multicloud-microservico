@@ -7,6 +7,12 @@ from datetime import date
 
 from finops_api.core.config import settings
 
+FIXED_MONTHLY_TARGETS_BRL_BY_CLOUD = {
+    "aws": 138_531.58,
+    "azure": 231_437.64,
+    "oci": 331_894.50,
+}
+
 
 @dataclass(frozen=True)
 class TargetDefaults:
@@ -25,6 +31,19 @@ class TargetsService:
             weekly_usd=settings.target_weekly_usd,
         )
         self.monthly_targets_by_cloud = self._parse_monthly_targets(settings.monthly_targets_json)
+
+    @staticmethod
+    def _default_monthly_target(currency: str, cloud: str) -> float:
+        currency_key = currency.upper()
+        if currency_key == "BRL":
+            fixed = FIXED_MONTHLY_TARGETS_BRL_BY_CLOUD.get((cloud or "all").lower())
+            if fixed and fixed > 0:
+                return fixed
+            configured = float(settings.target_monthly_brl or 0.0)
+            return configured if configured > 0 else 0.0
+
+        configured_usd = float(settings.target_monthly_usd or 0.0)
+        return configured_usd if configured_usd > 0 else 0.0
 
     @staticmethod
     def _parse_monthly_targets(raw: str) -> dict[str, dict[tuple[int, int], float]]:
@@ -54,15 +73,19 @@ class TargetsService:
 
     def monthly_target(self, cloud: str, month_date: date, currency: str) -> float:
         currency_key = currency.upper()
-        default_target = self.defaults.monthly_brl if currency_key == "BRL" else self.defaults.monthly_usd
         cloud_key = (cloud or "all").lower()
+        default_target = self._default_monthly_target(currency=currency_key, cloud=cloud_key)
         if currency_key != "BRL":
             return default_target
 
         cloud_map = self.monthly_targets_by_cloud.get(cloud_key) or self.monthly_targets_by_cloud.get("all")
         if not cloud_map:
             return default_target
-        return float(cloud_map.get((month_date.year, month_date.month), default_target))
+        configured_target = cloud_map.get((month_date.year, month_date.month))
+        if configured_target is None:
+            return default_target
+        configured_target = float(configured_target)
+        return configured_target if configured_target > 0 else default_target
 
     def yearly_target(self, cloud: str, year: int, currency: str) -> float:
         total = 0.0
@@ -101,4 +124,3 @@ class TargetsService:
 
         fallback_weekly = self.defaults.weekly_brl if currency.upper() == "BRL" else self.defaults.weekly_usd
         return fallback_weekly * (period_days / 7)
-

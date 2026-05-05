@@ -43,9 +43,16 @@ function ShellFrame({
   const { isSidebarCollapsed, filters, updateFilters } = useAppContext();
   const tenantOptionsQuery = useTenantOptionsQuery(filters.cloud, filters.cloud !== "all");
   const tenantOptions = useMemo(() => tenantOptionsQuery.data ?? [], [tenantOptionsQuery.data]);
+  const hasCurrentTenant = useMemo(
+    () => tenantOptions.some((tenant) => tenant.tenantKey === filters.tenant),
+    [tenantOptions, filters.tenant],
+  );
   const isTenantBootstrapPending =
-    filters.cloud !== "all" && !filters.tenant && (tenantOptionsQuery.isLoading || tenantOptionsQuery.isFetching);
-  const needsTenantSelection = filters.cloud !== "all" && tenantOptions.length > 0 && !filters.tenant;
+    filters.cloud !== "all" &&
+    (!filters.tenant || !hasCurrentTenant) &&
+    (tenantOptionsQuery.isLoading || tenantOptionsQuery.isFetching);
+  const needsTenantSelection =
+    filters.cloud !== "all" && tenantOptions.length > 0 && (!filters.tenant || !hasCurrentTenant);
   const resolvedTenant = needsTenantSelection ? resolveTenantForCloud(filters.cloud, tenantOptions, filters.tenant) : "";
   const shouldHoldContent = isTenantBootstrapPending || needsTenantSelection;
 

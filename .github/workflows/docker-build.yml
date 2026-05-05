@@ -1,0 +1,111 @@
+name: Build and Push Docker Images
+
+on:
+  push:
+    tags:
+      - "v*"
+
+env:
+  NAMESPACE: vaniusoliveira
+
+jobs:
+  # ── Detecta se a imagem base de CLIs mudou ─────────────────────────────────
+  detect-changes:
+    runs-on: ubuntu-latest
+    outputs:
+      base-changed: ${{ steps.filter.outputs.base }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            base:
+              - 'finops-micro/backend/Dockerfile.base-clls'
+
+  # ── Imagem base com CLIs (AWS, Azure, OCI) — só reconstrói quando mudar ────
+  build-base:
+    needs: detect-changes
+    if: needs.detect-changes.outputs.base-changed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: finops-micro/backend
+          file: finops-micro/backend/Dockerfile.base-clls
+          push: true
+          tags: |
+            ${{ env.NAMESPACE }}/finops-base-clls:${{ github.ref_name }}
+            ${{ env.NAMESPACE }}/finops-base-clls:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Backend FastAPI ─────────────────────────────────────────────────────────
+  build-backend:
+    needs: [detect-changes, build-base]
+    # Executa mesmo se build-base foi pulado (base não mudou)
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: finops-micro/backend
+          file: finops-micro/backend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ env.NAMESPACE }}/finops-backend:${{ github.ref_name }}
+            ${{ env.NAMESPACE }}/finops-backend:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ── Frontend Next.js ────────────────────────────────────────────────────────
+  build-frontend:
+    needs: detect-changes
+    if: always() && !failure() && !cancelled()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      # NEXT_PUBLIC_* são baked em build time — vêm de GitHub Variables (não secrets)
+      - uses: docker/build-push-action@v6
+        with:
+          context: finops-micro/frontend
+          file: finops-micro/frontend/Dockerfile.prod
+          push: true
+          tags: |
+            ${{ env.NAMESPACE }}/finops-frontend:${{ github.ref_name }}
+            ${{ env.NAMESPACE }}/finops-frontend:latest
+          build-args: |
+            NEXT_PUBLIC_API_GATEWAY_URL=${{ vars.API_GATEWAY_URL }}
+            NEXT_PUBLIC_API_BASE_PATH=/api/v1
+            NEXT_PUBLIC_USE_MOCKS=false
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

@@ -5,13 +5,13 @@ services:
       context: ../finops-micro/frontend
       dockerfile: Dockerfile.prod
       args:
-        NEXT_PUBLIC_API_GATEWAY_URL: ${NEXT_PUBLIC_API_GATEWAY_URL:-http://finops.local}
+        NEXT_PUBLIC_API_GATEWAY_URL: ${NEXT_PUBLIC_API_GATEWAY_URL:-http://finops.local-dev}
         NEXT_PUBLIC_API_BASE_PATH: ${NEXT_PUBLIC_API_BASE_PATH:-/api/v1}
         NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS:-false}
     container_name: finops-web
     restart: unless-stopped
     environment:
-      NEXT_PUBLIC_API_GATEWAY_URL: ${NEXT_PUBLIC_API_GATEWAY_URL:-http://finops.local}
+      NEXT_PUBLIC_API_GATEWAY_URL: ${NEXT_PUBLIC_API_GATEWAY_URL:-http://finops.local-dev}
       NEXT_PUBLIC_API_BASE_PATH: ${NEXT_PUBLIC_API_BASE_PATH:-/api/v1}
       NEXT_PUBLIC_USE_MOCKS: ${NEXT_PUBLIC_USE_MOCKS:-false}
     expose:
@@ -26,7 +26,7 @@ services:
     labels:
       - traefik.enable=true
       - traefik.docker.network=proxy
-      - traefik.http.routers.finops-web.rule=Host(`${FINOPS_WEB_HOST:-finops.local}`)
+      - traefik.http.routers.finops-web.rule=Host(`${FINOPS_WEB_HOST:-finops.local-dev}`)
       - traefik.http.routers.finops-web.entrypoints=${TRAEFIK_ENTRYPOINTS:-web}
       - traefik.http.routers.finops-web.priority=1
       - traefik.http.services.finops-web.loadbalancer.server.port=3000

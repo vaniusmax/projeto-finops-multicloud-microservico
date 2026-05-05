@@ -1,0 +1,52 @@
+# Imagem base com AWS CLI, Azure CLI e OCI CLI pré-instalados.
+# Construída separadamente e publicada como vaniusoliveira/finops-base-clls:<tag>.
+# Só precisa ser reconstruída quando os CLIs precisarem de atualização.
+# Comando: make base-build && make base-push (a partir de finops-traefik-stack/)
+
+FROM python:3.13-slim
+
+ARG TARGETARCH
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ca-certificates \
+    curl \
+    gnupg \
+    groff \
+    less \
+    lsb-release \
+    python3-venv \
+    unzip \
+  && rm -rf /var/lib/apt/lists/*
+
+# AWS CLI v2 (verificação por checksum embutida no instalador oficial)
+RUN set -eux; \
+  case "${TARGETARCH:-$(dpkg --print-architecture)}" in \
+    amd64) aws_arch="x86_64" ;; \
+    arm64) aws_arch="aarch64" ;; \
+    *) echo "Arquitetura nao suportada para AWS CLI: ${TARGETARCH:-unknown}" >&2; exit 1 ;; \
+  esac; \
+  tmp_dir="$(mktemp -d)"; \
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip" -o "${tmp_dir}/awscliv2.zip"; \
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-${aws_arch}.zip.sig" -o "${tmp_dir}/awscliv2.zip.sig"; \
+  unzip -q "${tmp_dir}/awscliv2.zip" -d "${tmp_dir}"; \
+  "${tmp_dir}/aws/install" --bin-dir /usr/local/bin --install-dir /usr/local/aws-cli --update; \
+  rm -rf "${tmp_dir}"
+
+# Azure CLI — via pacote apt (repositório Microsoft, evita curl|bash)
+RUN set -eux; \
+    distro="$(lsb_release -cs)"; \
+    if [ "${distro}" = "trixie" ]; then distro="bookworm"; fi; \
+    curl -fsSL https://packages.microsoft.com/keys/microsoft.asc \
+      | gpg --dearmor -o /usr/share/keyrings/microsoft.gpg; \
+    echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/microsoft.gpg] https://packages.microsoft.com/repos/azure-cli/ ${distro} main" \
+      > /etc/apt/sources.list.d/azure-cli.list; \
+    apt-get update && apt-get install -y --no-install-recommends azure-cli; \
+    rm -rf /var/lib/apt/lists/*
+
+# OCI CLI — via pip (mais controlado e reproduzível que o script de instalação)
+RUN pip install --no-cache-dir oci-cli
+
+RUN addgroup --system app && adduser --system --ingroup app app

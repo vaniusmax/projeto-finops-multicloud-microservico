@@ -22,6 +22,8 @@ from finops_api.schemas.finops import (
     CostExplorerTrendItem,
     DailyItem,
     FiltersV2Response,
+    OciTagCostResponse,
+    OciTagDailyItem,
     RankedItemV2,
     ReingestRequest,
     ReingestResponse,
@@ -36,6 +38,10 @@ from finops_api.services.cost_explorer_insight_service import CostExplorerInsigh
 from finops_api.services.cost_explorer_service import CostExplorerService
 from finops_api.services.currency_rate_sync_service import CurrencyRateSyncService
 from finops_api.services.ingest_service import run_ingest_job
+from finops_api.services.oci_tag_analytics_service import (
+    OCI_TAG_TENANT_KEY,
+    OciTagAnalyticsService,
+)
 from finops_api.services.tenant_service import TenantService
 
 router = APIRouter(prefix="/finops", tags=["finops-v2"])
@@ -143,8 +149,14 @@ def ensure_ingest_v2_summary(
     refresh: bool = Query(default=False),
     db: Session = Depends(get_db),
 ) -> QueryFilters:
-    reference_date = filters.end
+    current_date = date.today()
+    reference_date = min(filters.end, current_date)
     year_start = reference_date.replace(month=1, day=1)
+    current_month_start = current_date.replace(day=1)
+    sync_windows = [(year_start, reference_date)]
+    if current_date > reference_date:
+        sync_windows.append((current_month_start, current_date))
+
     tenant = TenantService(db).resolve_tenant(filters.cloud, filters.tenant_key)
     filters.tenant_id = tenant.tenant_id if tenant else None
     if refresh:
@@ -152,11 +164,13 @@ def ensure_ingest_v2_summary(
         for provider in providers:
             tenant_keys = _tenant_keys_for_request(db, provider, filters.tenant_key if provider == filters.cloud else None)
             for current_tenant_key in tenant_keys:
-                run_ingest_job(db, provider=provider, start=year_start, end=reference_date, tenant_key=current_tenant_key)
-        CurrencyRateSyncService(db).ensure_brl_usd_rate(date.today())
+                for sync_start, sync_end in sync_windows:
+                    run_ingest_job(db, provider=provider, start=sync_start, end=sync_end, tenant_key=current_tenant_key)
+        CurrencyRateSyncService(db).ensure_brl_usd_rate(current_date)
     else:
-        AutoIngestService(db).ensure_range(filters.cloud, year_start, reference_date, tenant_key=filters.tenant_key)
-        CurrencyRateSyncService(db).ensure_brl_usd_rate(date.today())
+        for sync_start, sync_end in sync_windows:
+            AutoIngestService(db).ensure_range(filters.cloud, sync_start, sync_end, tenant_key=filters.tenant_key)
+        CurrencyRateSyncService(db).ensure_brl_usd_rate(current_date)
     # O summary usa acumulados mensal/anual e deve ser resiliente a cobertura parcial.
     # Quando faltarem dados no intervalo, seguimos com os dados disponiveis em vez de
     # interromper o dashboard com 409.
@@ -374,6 +388,74 @@ def post_cost_explorer_insights_v2(
         top_n=payload.topN,
         group_by=payload.groupBy,
         selected_item=payload.selectedItem,
+    )
+
+
+@router.get("/oci/tag-cost", response_model=OciTagCostResponse)
+def get_oci_tag_cost(
+    tenant_key: str = Query(..., alias="tenantKey"),
+    from_date: date = Query(..., alias="from"),
+    to_date: date = Query(..., alias="to"),
+    tag_namespace: str = Query(..., alias="tagNamespace", min_length=1, max_length=128),
+    tag_key: str = Query(..., alias="tagKey", min_length=1, max_length=128),
+    currency: str = Query(default="BRL", pattern="^(BRL|USD)$"),
+    top_n: int = Query(default=12, alias="topN", ge=1, le=50),
+    db: Session = Depends(get_db),
+) -> OciTagCostResponse:
+    """Custos OCI por tag (namespace+key) agregados por dia.
+
+    Endpoint exclusivo da cloud OCI e do tenant ``OCI-TENANT-ORACLE-SOA``.
+    Faz consulta on-demand ao OCI CLI sem persistir, replicando o gráfico
+    "Cost by Date" do console OCI Cost Analysis com Grouping = Tag.
+    """
+    if from_date > to_date:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="from deve ser menor ou igual a to",
+        )
+    range_days = (to_date - from_date).days
+    if range_days > settings.ingest_max_range_days:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Intervalo de {range_days} dias excede o máximo permitido de "
+                f"{settings.ingest_max_range_days} dias"
+            ),
+        )
+
+    normalized_tenant = (tenant_key or "").strip()
+    if normalized_tenant.upper() != OCI_TAG_TENANT_KEY:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                "tag-cost OCI está disponível apenas para tenant_key "
+                f"{OCI_TAG_TENANT_KEY}"
+            ),
+        )
+
+    try:
+        breakdown = OciTagAnalyticsService(db).daily_tag_breakdown(
+            tenant_key=normalized_tenant,
+            start=from_date,
+            end=to_date,
+            currency=currency,
+            tag_namespace=tag_namespace,
+            tag_key=tag_key,
+            top_n=top_n,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
+
+    return OciTagCostResponse(
+        tenantKey=normalized_tenant,
+        tagNamespace=tag_namespace,
+        tagKey=tag_key,
+        currency=breakdown.currency,
+        totalPeriod=breakdown.total_period,
+        tagValues=breakdown.tag_values,
+        items=[OciTagDailyItem(**item) for item in breakdown.items],
     )
 
 

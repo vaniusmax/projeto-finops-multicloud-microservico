@@ -46,12 +46,13 @@ class AnalyticsService:
         peak = max(daily, key=lambda item: item["total"]) if daily else {"date": filters.start, "total": 0.0}
         peak_day = PeakDay(date=peak["date"], amount=peak["total"])
 
-        reference_date = filters.end
-        month_start = reference_date.replace(day=1)
+        current_date = date.today()
+        reference_date = min(filters.end, current_date)
+        month_start = current_date.replace(day=1)
         month_filters = QueryFilters(
             cloud=filters.cloud,
             start=month_start,
-            end=reference_date,
+            end=current_date,
             currency=filters.currency,
             tenant_id=filters.tenant_id,
             tenant_key=filters.tenant_key,
@@ -81,7 +82,7 @@ class AnalyticsService:
             currency=filters.currency,
         )
 
-        current_rate_date = date.today()
+        current_rate_date = current_date
         usd_rate = None
         if self.currency_repo is not None:
             usd_rate = self.currency_repo.get_brl_per_usd(current_rate_date)

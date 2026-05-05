@@ -8,6 +8,12 @@ const DEFAULT_TENANT_BY_CLOUD: Record<string, string> = {
   oci: "OCI-TENANT-OCVS",
 };
 
+export const OCI_TAG_TENANT_KEY = "OCI-TENANT-ORACLE-SOA";
+
+export function isOciTagTenant(cloud: string, tenant: string): boolean {
+  return cloud === "oci" && tenant.toUpperCase() === OCI_TAG_TENANT_KEY;
+}
+
 export function getDefaultTenantForCloud(cloud: string): string {
   return DEFAULT_TENANT_BY_CLOUD[cloud] ?? "";
 }

@@ -36,6 +36,9 @@ def run_cli_with_retry(
             last_error = result.stderr.strip() or result.stdout.strip() or f"exit code {result.returncode}"
         except subprocess.TimeoutExpired:
             last_error = f"Timeout apos {timeout}s"
+        except FileNotFoundError as exc:
+            executable = command[0] if command else "comando"
+            raise RuntimeError(f"{label} indisponivel: binario '{executable}' nao encontrado no ambiente") from exc
 
         if attempt < max_attempts:
             backoff = retry_delay * attempt

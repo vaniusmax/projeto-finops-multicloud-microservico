@@ -145,6 +145,23 @@ export const costExplorerInsightSchema = z.object({
   }),
 });
 
+export const ociTagCostSchema = z.object({
+  cloud: z.string(),
+  tenantKey: z.string(),
+  tagNamespace: z.string(),
+  tagKey: z.string(),
+  currency: z.string(),
+  totalPeriod: z.number(),
+  tagValues: z.array(z.string()),
+  items: z.array(
+    z.object({
+      date: z.string(),
+      total: z.number(),
+      byTag: z.record(z.number()),
+    }),
+  ),
+});
+
 export const dailySchema = z.array(dailyItemSchema);
 export const tenantsSchema = z.array(tenantSchema);
 export const topServicesSchema = z.array(
@@ -172,3 +189,4 @@ export type CostExplorerSnapshotResponse = z.infer<typeof costExplorerSnapshotSc
 export type CostExplorerBreakdownResponse = z.infer<typeof costExplorerBreakdownSchema>;
 export type CostExplorerTrendResponse = z.infer<typeof costExplorerTrendSchema>;
 export type CostExplorerInsightResponse = z.infer<typeof costExplorerInsightSchema>;
+export type OciTagCostResponse = z.infer<typeof ociTagCostSchema>;

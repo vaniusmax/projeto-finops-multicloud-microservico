@@ -2,8 +2,7 @@
 # Global ignores (workspace)
 # =========================
 
-# Legacy consultation project (ignore entirely)
-projeto-finops-multicloud/
+# Legacy (removido)
 
 # Python
 **/__pycache__/
@@ -58,3 +57,5 @@ projeto-finops-multicloud/
 # Secrets and private keys
 **/*.pem
 **/*.key
+**/*.crt
+**/traefik/dynamic/certs/

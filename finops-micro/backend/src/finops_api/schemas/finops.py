@@ -192,6 +192,23 @@ class CostExplorerInsightResponse(BaseModel):
     evidence: CostExplorerInsightEvidence
 
 
+class OciTagDailyItem(BaseModel):
+    date: date
+    total: float
+    byTag: dict[str, float] = Field(default_factory=dict)
+
+
+class OciTagCostResponse(BaseModel):
+    cloud: Literal["oci"] = "oci"
+    tenantKey: str
+    tagNamespace: str
+    tagKey: str
+    currency: str
+    totalPeriod: float
+    tagValues: list[str] = Field(default_factory=list)
+    items: list[OciTagDailyItem] = Field(default_factory=list)
+
+
 class ReingestRequest(BaseModel):
     cloud: str
     tenant_key: str | None = None
