@@ -37,6 +37,15 @@ class OciTagCostRow:
     amount: Decimal
 
 
+@dataclass(frozen=True)
+class OciDailyCostTotalRow:
+    """Total diário de custo OCI sem agrupamento por tag."""
+
+    usage_date: date
+    currency_code: str
+    amount: Decimal
+
+
 class OciCliClient:
     def __init__(self, provider_settings: OciCliSettings) -> None:
         if not provider_settings.tenant_id:
@@ -141,6 +150,52 @@ class OciCliClient:
         )
         return self._parse_tag_cost(json.loads(stdout), tag_namespace=ns, tag_key=key)
 
+    def fetch_daily_total_costs(
+        self,
+        start: date,
+        end: date,
+    ) -> list[OciDailyCostTotalRow]:
+        """Consulta custo total diário OCI sem agrupamento.
+
+        Usado para reconciliar custos sem a tag alvo (untagged) quando o
+        agrupamento por tag retorna apenas itens tagueados.
+        """
+        command = [
+            self.settings.cli_path,
+            "usage-api",
+            "usage-summary",
+            "request-summarized-usages",
+            "--profile",
+            self.settings.profile,
+            "--region",
+            self.settings.region,
+            "--tenant-id",
+            self.settings.tenant_id,
+            "--time-usage-started",
+            self._iso_z(start),
+            "--time-usage-ended",
+            self._iso_z(end + timedelta(days=1)),
+            "--granularity",
+            self.settings.granularity,
+            "--query-type",
+            self.settings.query_type,
+            "--compartment-depth",
+            str(self.settings.compartment_depth),
+            "--output",
+            "json",
+        ]
+        env = os.environ.copy()
+        env.setdefault("SUPPRESS_LABEL_WARNING", "True")
+        stdout = run_cli_with_retry(
+            command,
+            timeout=self.settings.timeout,
+            max_attempts=self.settings.retry_attempts,
+            retry_delay=self.settings.retry_delay,
+            env=env,
+            label="OCI Usage total",
+        )
+        return self._parse_daily_totals(json.loads(stdout))
+
     def _parse(self, payload: dict[str, Any]) -> list[CanonicalCostRow]:
         rows: list[CanonicalCostRow] = []
         for item in ((payload.get("data") or {}).get("items") or []):
@@ -208,6 +263,29 @@ class OciCliClient:
                     tag_namespace=tag_namespace,
                     tag_key=tag_key,
                     tag_value=tag_value,
+                    currency_code=currency,
+                    amount=amount,
+                )
+            )
+        return rows
+
+    def _parse_daily_totals(self, payload: dict[str, Any]) -> list[OciDailyCostTotalRow]:
+        rows: list[OciDailyCostTotalRow] = []
+        for item in ((payload.get("data") or {}).get("items") or []):
+            usage_text = str(item.get("time-usage-started", "")).replace("Z", "+00:00")
+            if not usage_text:
+                continue
+            usage_date = datetime.fromisoformat(usage_text).date()
+            currency = str(
+                item.get("currency")
+                or item.get("currency-code")
+                or item.get("currencyCode")
+                or "BRL"
+            ).strip().upper() or "BRL"
+            amount = Decimal(str(item.get("computed-amount") or "0"))
+            rows.append(
+                OciDailyCostTotalRow(
+                    usage_date=usage_date,
                     currency_code=currency,
                     amount=amount,
                 )

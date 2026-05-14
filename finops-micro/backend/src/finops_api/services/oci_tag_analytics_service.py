@@ -12,6 +12,7 @@ from finops_api.core.config import settings
 from finops_api.providers.oci.cli_client import (
     OciCliClient,
     OciCliSettings,
+    OciDailyCostTotalRow,
     OciTagCostRow,
 )
 from finops_api.repositories.currency_rate_repo import CurrencyRateRepository
@@ -105,12 +106,20 @@ class OciTagAnalyticsService:
             tag_namespace=tag_namespace,
             tag_key=tag_key,
         )
-        return self._aggregate(rows=rows, currency=currency, top_n=top_n, end=end)
+        total_rows = oci_client.fetch_daily_total_costs(start=start, end=end)
+        return self._aggregate(
+            rows=rows,
+            total_rows=total_rows,
+            currency=currency,
+            top_n=top_n,
+            end=end,
+        )
 
     def _aggregate(
         self,
         *,
         rows: list[OciTagCostRow],
+        total_rows: list[OciDailyCostTotalRow],
         currency: str,
         top_n: int,
         end: date,
@@ -131,6 +140,34 @@ class OciTagAnalyticsService:
             tag_value = row.tag_value or "Untagged"
             totals_by_value[tag_value] += converted
             per_day[row.usage_date][tag_value] += converted
+
+        # Reconciliacao com o total diario da OCI: custos sem a tag alvo
+        # aparecem no console como "untagged", mas nao retornam no group-by-tag.
+        total_by_day: dict[date, Decimal] = defaultdict(lambda: Decimal("0"))
+        for row in total_rows:
+            converted_total = self._convert_amount(
+                amount=row.amount,
+                source_currency=row.currency_code,
+                target_currency=target_currency,
+                brl_per_usd=brl_per_usd,
+            )
+            total_by_day[row.usage_date] += converted_total
+
+        reconciliation_tolerance = Decimal("0.000001")
+        for usage_date, day_total in total_by_day.items():
+            tagged_total = sum(per_day[usage_date].values(), Decimal("0"))
+            untagged_total = day_total - tagged_total
+            if untagged_total > reconciliation_tolerance:
+                per_day[usage_date]["Untagged"] += untagged_total
+                totals_by_value["Untagged"] += untagged_total
+            elif untagged_total < -reconciliation_tolerance:
+                logger.warning(
+                    "OCI tag-cost reconciliacao negativa em %s: total=%s tagged=%s diff=%s",
+                    usage_date,
+                    day_total,
+                    tagged_total,
+                    untagged_total,
+                )
 
         ordered_values = sorted(
             totals_by_value.keys(),
@@ -170,7 +207,11 @@ class OciTagAnalyticsService:
         if others_values:
             legend_values.append("Others")
 
-        total_period = float(sum(totals_by_value.values()))
+        total_period = (
+            float(sum(total_by_day.values()))
+            if total_by_day
+            else float(sum(totals_by_value.values()))
+        )
 
         return OciTagDailyBreakdown(
             items=items,
